@@ -193,18 +193,32 @@ public interface AccessibilityMapper {
 
     @Select(
             """
-            WITH route AS (
+            WITH route AS MATERIALIZED (
                 SELECT ST_SetSRID(ST_GeomFromText(#{lineStringWkt}), 4326)::geography AS path
+            ), segments AS MATERIALIZED (
+                SELECT dumped.geom::geography AS path
+                FROM route
+                CROSS JOIN LATERAL ST_DumpSegments(route.path::geometry) AS dumped
+            ), candidate_ids AS MATERIALIZED (
+                SELECT DISTINCT issue.id
+                FROM segments
+                JOIN accessibility_issue issue
+                  ON issue.status IN ('PENDING', 'VERIFIED', 'PROCESSING')
+                 AND issue.confidence_score >= 20
+                 AND ST_DWithin(issue.location, segments.path, #{corridorMeters}, false)
+            ), distances AS MATERIALIZED (
+                SELECT issue.id AS issue_id, issue.type, issue.severity, issue.confidence_score,
+                       issue.last_reported_at,
+                       ST_Distance(issue.location, route.path, false) AS distance_to_route_meters
+                FROM candidate_ids
+                JOIN accessibility_issue issue ON issue.id = candidate_ids.id
+                CROSS JOIN route
             )
-            SELECT i.id AS issue_id, i.type, i.severity, i.confidence_score,
-                   ST_Distance(i.location, route.path) AS distance_to_route_meters,
-                   GREATEST(1, ROUND(i.severity * i.confidence_score / 10.0
-                       * GREATEST(0.25, 1 - EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - i.last_reported_at)) / 2592000.0)
-                       * (1 - ST_Distance(i.location, route.path) / #{corridorMeters})))::integer AS contribution
-            FROM accessibility_issue i CROSS JOIN route
-            WHERE i.status IN ('PENDING', 'VERIFIED', 'PROCESSING')
-              AND i.confidence_score >= 20
-              AND ST_DWithin(i.location, route.path, #{corridorMeters})
+            SELECT issue_id, type, severity, confidence_score, distance_to_route_meters,
+                   GREATEST(1, ROUND(severity * confidence_score / 10.0
+                       * GREATEST(0.25, 1 - EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - last_reported_at)) / 2592000.0)
+                       * (1 - distance_to_route_meters / #{corridorMeters})))::integer AS contribution
+            FROM distances
             ORDER BY contribution DESC, distance_to_route_meters
             LIMIT 100
             """)

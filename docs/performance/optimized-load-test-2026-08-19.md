@@ -92,3 +92,5 @@
 - `business-mix-moderate-optimized.json`
 
 这些文件有账号测试上下文且体积会持续增长，按仓库策略保持 Git ignored；可复现脚本和本报告会提交到 GitHub。
+
+路线风险分段过滤与 20 米走廊的第三轮复测见 `route-risk-optimization-2026-08-19.md`。

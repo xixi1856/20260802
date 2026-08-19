@@ -73,7 +73,7 @@ class AccessibilityServiceTest {
 
     @Test
     void scoresRouteFromNearbyIssueContributions() {
-        when(mapper.findRouteRisks("LINESTRING(116.39 39.91,116.4 39.92)", 30))
+        when(mapper.findRouteRisks("LINESTRING(116.39 39.91,116.4 39.92)", 20))
                 .thenReturn(List.of(
                         new RouteRiskRow(UUID.randomUUID(), IssueType.CONSTRUCTION, 5, 80, 3.5, 32),
                         new RouteRiskRow(UUID.randomUUID(), IssueType.TACTILE_PAVING_DAMAGED, 3, 60, 12.0, 11)));
@@ -85,7 +85,19 @@ class AccessibilityServiceTest {
         org.assertj.core.api.Assertions.assertThat(result.riskScore()).isEqualTo(43);
         org.assertj.core.api.Assertions.assertThat(result.riskLevel()).isEqualTo("MEDIUM");
         org.assertj.core.api.Assertions.assertThat(result.issueCount()).isEqualTo(2);
+        org.assertj.core.api.Assertions.assertThat(result.corridorMeters()).isEqualTo(20);
+    }
+
+    @Test
+    void keepsExplicitRouteCorridor() {
+        when(mapper.findRouteRisks("LINESTRING(116.39 39.91,116.4 39.92)", 30)).thenReturn(List.of());
+        AccessibilityService service = new AccessibilityService(mapper);
+
+        var result = service.assessRoute(new RouteRiskRequest(
+                List.of(new RouteRiskRequest.Point(116.39, 39.91), new RouteRiskRequest.Point(116.4, 39.92)), 30));
+
         org.assertj.core.api.Assertions.assertThat(result.corridorMeters()).isEqualTo(30);
+        verify(mapper).findRouteRisks("LINESTRING(116.39 39.91,116.4 39.92)", 30);
     }
 
     @Test

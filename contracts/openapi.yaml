@@ -692,7 +692,7 @@ components:
             properties:
               longitude: { type: number, minimum: -180, maximum: 180 }
               latitude: { type: number, minimum: -90, maximum: 90 }
-        corridorMeters: { type: [integer, 'null'], minimum: 5, maximum: 100, default: 30 }
+        corridorMeters: { type: [integer, 'null'], minimum: 5, maximum: 100, default: 20 }
     RouteRiskAssessment:
       type: object
       required: [riskScore, riskLevel, issueCount, corridorMeters, issues]

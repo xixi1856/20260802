@@ -28,6 +28,7 @@ public class AccessibilityService {
 
     private static final int DUPLICATE_RADIUS_METERS = 20;
     private static final long DUPLICATE_WINDOW_MINUTES = 30;
+    private static final int DEFAULT_ROUTE_CORRIDOR_METERS = 20;
 
     private final AccessibilityMapper mapper;
 
@@ -118,7 +119,8 @@ public class AccessibilityService {
 
     @Transactional(readOnly = true)
     public RouteRiskResponse assessRoute(RouteRiskRequest request) {
-        int corridorMeters = request.corridorMeters() == null ? 30 : request.corridorMeters();
+        int corridorMeters =
+                request.corridorMeters() == null ? DEFAULT_ROUTE_CORRIDOR_METERS : request.corridorMeters();
         String lineString = "LINESTRING("
                 + request.points().stream()
                         .map(point -> point.longitude() + " " + point.latitude())

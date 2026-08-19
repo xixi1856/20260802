@@ -4,6 +4,7 @@ import exec from 'k6/execution';
 import { authParams, BASE_URL, currentUser, loginAllUsers } from './lib/common.js';
 
 const duration = __ENV.DURATION || '90s';
+const routeCorridorMeters = Number(__ENV.ROUTE_CORRIDOR_METERS || 20);
 
 export const options = {
   scenarios: {
@@ -79,7 +80,7 @@ export function routeRisk(data) {
   }
   const response = http.post(
     `${BASE_URL}/accessibility-issues/route-risk-assessments`,
-    JSON.stringify({ points, corridorMeters: 30 }),
+    JSON.stringify({ points, corridorMeters: routeCorridorMeters }),
     authParams('route-risk', data),
   );
   check(response, { 'route risk returned 200': (value) => value.status === 200 });

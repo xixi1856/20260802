@@ -22,6 +22,7 @@ k6 run --summary-export load\results\nearby-100rps.json load\k6-nearby.js
 k6 run --summary-export load\results\issue-concurrency-20rps.json load\k6-issue-concurrency.js
 k6 run --summary-export load\results\track-20rps-batch20.json load\k6-track-points.js
 k6 run --summary-export load\results\nearby-hot-cache-200rps.json load\k6-nearby-hot-cache.js
+k6 run --summary-export load\results\route-risk-10rps.json load\k6-route-risk.js
 
 $env:DURATION='60s'
 $env:NEARBY_RATE='10'
@@ -31,7 +32,7 @@ $env:REPORT_RATE='2'
 k6 run --summary-export load\results\business-mix.json load\k6-business-mix.js
 ```
 
-可用环境变量：`BASE_URL`、`MAX_RATE`、`RATE`、`DURATION`、`BATCH_SIZE`，以及混合场景中的四个 `*_RATE`。
+可用环境变量：`BASE_URL`、`MAX_RATE`、`RATE`、`DURATION`、`BATCH_SIZE`、`CORRIDOR_METERS`，以及混合场景中的四个 `*_RATE` 和 `ROUTE_CORRIDOR_METERS`。
 
 ## 3. MQTT 压测
 
