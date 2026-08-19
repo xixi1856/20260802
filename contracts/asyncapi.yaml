@@ -1,0 +1,91 @@
+asyncapi: 3.1.0
+info:
+  title: BlindWay Raspberry Pi MQTT API
+  version: 1.0.0
+  description: |
+    树莓派只上传结构化感知事件，不上传视频、连续图片或GPS。
+    安全提醒完全在树莓派本地完成，不等待MQTT或Java后端。
+    QoS 1消息可能重复，eventId重传时必须保持不变。
+defaultContentType: application/json
+servers:
+  local:
+    host: localhost:1883
+    protocol: mqtt
+    description: 仅用于本地开发
+  production:
+    host: mqtt.example.com:8883
+    protocol: mqtts
+    description: 生产必须替换域名并启用TLS与每设备独立凭据
+channels:
+  heartbeat:
+    address: blindway/v1/devices/{deviceId}/heartbeat
+    parameters:
+      deviceId:
+        description: 设备 UUID
+    messages:
+      heartbeat:
+        $ref: '#/components/messages/Heartbeat'
+  pathEvents:
+    address: blindway/v1/devices/{deviceId}/path-events
+    parameters:
+      deviceId:
+        description: 设备 UUID
+    messages:
+      pathEvent:
+        $ref: '#/components/messages/PathEvent'
+  obstacleEvents:
+    address: blindway/v1/devices/{deviceId}/obstacle-events
+    parameters:
+      deviceId:
+        description: 设备 UUID
+    messages:
+      obstacleEvent:
+        $ref: '#/components/messages/ObstacleEvent'
+operations:
+  receiveHeartbeat:
+    action: receive
+    summary: 接收设备健康状态
+    description: QoS 0，每10秒一次，不离线补传。
+    channel:
+      $ref: '#/channels/heartbeat'
+  receivePathEvent:
+    action: receive
+    summary: 接收盲道相对位置观察
+    description: QoS 1，状态变化时发送，稳定状态每2秒最多一次。
+    channel:
+      $ref: '#/channels/pathEvents'
+  receiveObstacleEvent:
+    action: receive
+    summary: 接收盲道走廊内障碍快照
+    description: QoS 1，本地提醒触发时每秒最多一次；事件不能自动转换为社区问题。
+    channel:
+      $ref: '#/channels/obstacleEvents'
+components:
+  messages:
+    Heartbeat:
+      name: Heartbeat
+      title: 设备心跳
+      summary: 设备资源、模型版本和组件状态
+      description: 合法与非法载荷见examples/mqtt/heartbeat.*.json。
+      correlationId:
+        location: $message.payload#/eventId
+      payload:
+        $ref: ./schemas/mqtt/heartbeat.schema.json
+    PathEvent:
+      name: PathEvent
+      title: 盲道观察
+      summary: 盲道在摄像头左侧、前方、右侧或未识别
+      description: LEFT和RIGHT不是导航方向；合法与非法载荷见examples/mqtt/path-event.*.json。
+      correlationId:
+        location: $message.payload#/eventId
+      payload:
+        $ref: ./schemas/mqtt/path-event.schema.json
+    ObstacleEvent:
+      name: ObstacleEvent
+      title: 当前盲道障碍快照
+      summary: 只包含与当前盲道走廊重叠且在本地阈值内的目标
+      description: 不包含速度、跟踪ID、接近状态或TTC；合法与非法载荷见examples/mqtt/obstacle-event.*.json。
+      correlationId:
+        location: $message.payload#/eventId
+      payload:
+        $ref: ./schemas/mqtt/obstacle-event.schema.json

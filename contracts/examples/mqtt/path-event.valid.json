@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "1.0",
+  "eventId": "3013e737-d294-485f-b0d4-1d427da48644",
+  "deviceId": "cb94d02f-3843-41a4-8312-b549690ba21d",
+  "tripId": "efb98a51-f232-4de4-bf5f-704a843cc9c6",
+  "bootId": "4fc08d04-e62e-4eed-aa46-410bebd3d498",
+  "sequenceNo": 1025,
+  "occurredAt": "2026-08-04T08:30:02.120Z",
+  "sentAt": "2026-08-04T08:30:02.180Z",
+  "payload": {
+    "state": "LEFT",
+    "confidence": 0.91,
+    "nearestDistanceMeters": 1.7,
+    "lateralOffsetMeters": -0.45,
+    "measurementQuality": "MEDIUM",
+    "processingLatencyMs": 83
+  }
+}

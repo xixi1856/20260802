@@ -1,0 +1,12 @@
+package com.blindway.accessibility.domain;
+
+public enum IssueType {
+    TACTILE_PAVING_DAMAGED,
+    TACTILE_PAVING_MISSING,
+    TACTILE_PAVING_INTERRUPTED,
+    LONG_TERM_OCCUPATION,
+    CONSTRUCTION,
+    ACCESSIBLE_RAMP,
+    AUDIBLE_SIGNAL,
+    ACCESSIBLE_PLACE
+}

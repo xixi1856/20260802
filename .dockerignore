@@ -1,0 +1,13 @@
+.git
+.github
+.idea
+.vscode
+data
+docs
+load
+ops
+tools
+*.log
+.env
+.env.*
+!.env.example

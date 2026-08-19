@@ -1,0 +1,790 @@
+openapi: 3.1.0
+info:
+  title: BlindWay REST API
+  version: 1.0.0
+  description: 手机端、管理端与EMQX使用的BlindWay后端契约。所有手机坐标均为WGS84，经度在前、纬度在后。
+  license:
+    name: Apache License 2.0
+    identifier: Apache-2.0
+servers:
+  - url: /api/v1
+    description: 与当前文档站点同源的API
+tags:
+  - name: Auth
+    description: 用户注册、登录与令牌轮换
+  - name: Devices
+    description: 树莓派设备配置、绑定和密钥轮换
+  - name: Trips
+    description: 行程状态与手机WGS84轨迹
+  - name: Accessibility
+    description: 仅用于长期无障碍问题的社区数据
+  - name: Media
+    description: 私有证据图片
+  - name: Map
+    description: 高德Web服务预览适配；连续导航由手机完成
+  - name: Internal EMQX
+    description: 仅允许EMQX所在内部网络调用的认证与授权接口
+paths:
+  /auth/register:
+    post:
+      tags: [Auth]
+      operationId: register
+      summary: 注册用户
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterRequest' }
+      responses:
+        '201':
+          description: 注册成功并返回令牌
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenResponse' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+  /auth/login:
+    post:
+      tags: [Auth]
+      operationId: login
+      summary: 使用邮箱和密码登录
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenResponse' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      operationId: refresh
+      summary: 旋转刷新令牌
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshRequest' }
+      responses:
+        '200':
+          description: 令牌轮换成功，旧刷新令牌立即失效
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenResponse' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+  /auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logout
+      summary: 注销刷新令牌
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshRequest' }
+      responses:
+        '204': { description: 刷新令牌已撤销；重复调用仍成功 }
+        '400': { $ref: '#/components/responses/Problem' }
+  /devices:
+    get:
+      tags: [Devices]
+      operationId: listMyDevices
+      summary: 查询当前用户的设备
+      responses:
+        '200':
+          description: 当前用户拥有的设备
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Device' }
+        '401': { $ref: '#/components/responses/Problem' }
+    post:
+      tags: [Devices]
+      operationId: provisionDevice
+      summary: 管理员配置新设备
+      description: 设备密钥只在本响应中出现一次，服务端仅保存SHA-256哈希。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProvisionDeviceRequest' }
+      responses:
+        '201':
+          description: 设备配置成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProvisionedDevice' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+  /devices/{deviceId}/binding:
+    post:
+      tags: [Devices]
+      operationId: bindDevice
+      summary: 使用一次性密钥绑定设备
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BindDeviceRequest' }
+      responses:
+        '204': { description: 设备绑定成功 }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+  /devices/{deviceId}/secret-rotation:
+    post:
+      tags: [Devices]
+      operationId: rotateDeviceSecret
+      summary: 当前所有者轮换设备密钥
+      description: 新密钥只返回一次，旧密钥在事务提交后立即失效；调用方必须安全更新树莓派配置。
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+      responses:
+        '200':
+          description: 密钥轮换成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RotatedDeviceSecret' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+  /trips:
+    post:
+      tags: [Trips]
+      operationId: startTrip
+      summary: 为已绑定设备开始行程
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StartTripRequest' }
+      responses:
+        '201':
+          description: 行程已开始
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Trip' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+  /trips/{tripId}/track-points:
+    post:
+      tags: [Trips]
+      operationId: appendTrackPoints
+      summary: 批量追加手机WGS84轨迹点
+      parameters:
+        - $ref: '#/components/parameters/TripId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TrackPointBatchRequest' }
+      responses:
+        '202': { description: 轨迹点已接受 }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+  /trips/{tripId}/completion:
+    post:
+      tags: [Trips]
+      operationId: completeTrip
+      summary: 完成进行中的行程
+      parameters:
+        - $ref: '#/components/parameters/TripId'
+      responses:
+        '200':
+          description: 行程已完成
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Trip' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+  /accessibility-issues:
+    get:
+      tags: [Accessibility]
+      operationId: nearbyIssues
+      summary: 按距离查询附近持久问题
+      parameters:
+        - { name: longitude, in: query, required: true, schema: { type: number, minimum: -180, maximum: 180 } }
+        - { name: latitude, in: query, required: true, schema: { type: number, minimum: -90, maximum: 90 } }
+        - { name: radiusMeters, in: query, schema: { type: integer, minimum: 10, maximum: 5000, default: 500 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        '200':
+          description: 按距离升序返回长期问题
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AccessibilityIssue' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+    post:
+      tags: [Accessibility]
+      operationId: createIssue
+      summary: 上报或聚合持久无障碍问题
+      description: 同类型问题在20米和30分钟窗口内会聚合到已有Issue并累加可信度，避免并发重复建单。动态障碍不会未经治理直接进入社区地图。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateIssueRequest' }
+      responses:
+        '201':
+          description: 问题已创建
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccessibilityIssue' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+  /accessibility-issues/route-risk-assessments:
+    post:
+      tags: [Accessibility]
+      operationId: assessRouteRisk
+      summary: 评估WGS84路线走廊内的无障碍风险
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RouteRiskRequest' }
+      responses:
+        '200':
+          description: 路线风险评分和贡献问题列表
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RouteRiskAssessment' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+  /accessibility-issues/{issueId}:
+    get:
+      tags: [Accessibility]
+      operationId: getIssue
+      summary: 查询问题详情
+      parameters:
+        - $ref: '#/components/parameters/IssueId'
+      responses:
+        '200':
+          description: 问题详情
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccessibilityIssue' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+  /accessibility-issues/{issueId}/verifications:
+    post:
+      tags: [Accessibility]
+      operationId: verifyIssue
+      summary: 确认或反对问题真实性
+      parameters:
+        - $ref: '#/components/parameters/IssueId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VerificationRequest' }
+      responses:
+        '204': { description: 核验结果已保存 }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+  /accessibility-issues/{issueId}/reports:
+    get:
+      tags: [Accessibility]
+      operationId: getIssueReports
+      summary: 查询聚合到问题下的原始上报记录
+      parameters:
+        - $ref: '#/components/parameters/IssueId'
+      responses:
+        '200':
+          description: 原始上报记录
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/IssueReport' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+  /accessibility-issues/{issueId}/transitions:
+    post:
+      tags: [Accessibility]
+      operationId: transitionIssue
+      summary: 通过状态机和乐观锁推进问题治理状态
+      parameters:
+        - $ref: '#/components/parameters/IssueId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TransitionIssueRequest' }
+      responses:
+        '200':
+          description: 更新后的问题
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccessibilityIssue' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+  /accessibility-issues/{issueId}/evidence:
+    post:
+      tags: [Accessibility]
+      operationId: attachIssueEvidence
+      summary: 关联当前用户上传的证据图片
+      parameters:
+        - $ref: '#/components/parameters/IssueId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EvidenceRequest' }
+      responses:
+        '204': { description: 证据已关联 }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+  /media:
+    post:
+      tags: [Media]
+      operationId: uploadMedia
+      summary: 上传私有证据图片
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: 不超过5MB的JPEG、PNG或WebP
+      responses:
+        '201':
+          description: 图片已上传至私有对象存储
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MediaAsset' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '503': { $ref: '#/components/responses/Problem' }
+  /media/{mediaId}/access-url:
+    get:
+      tags: [Media]
+      operationId: getMediaAccessUrl
+      summary: 获取短期图片访问地址
+      parameters:
+        - name: mediaId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: 当前用户所拥有图片的短期签名URL
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MediaAccessUrl' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '503': { $ref: '#/components/responses/Problem' }
+  /map/reverse-geocode:
+    get:
+      tags: [Map]
+      operationId: reverseGeocode
+      summary: 将WGS84位置转换为高德地址
+      parameters:
+        - { name: longitude, in: query, required: true, schema: { type: number, minimum: -180, maximum: 180 } }
+        - { name: latitude, in: query, required: true, schema: { type: number, minimum: -90, maximum: 90 } }
+      responses:
+        '200':
+          description: 高德逆地理编码结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReverseGeocode' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '503': { $ref: '#/components/responses/Problem' }
+  /map/walking-routes:
+    get:
+      tags: [Map]
+      operationId: walkingRoute
+      summary: 获取高德步行路线预览
+      parameters:
+        - { name: originLongitude, in: query, required: true, schema: { type: number, minimum: -180, maximum: 180 } }
+        - { name: originLatitude, in: query, required: true, schema: { type: number, minimum: -90, maximum: 90 } }
+        - { name: destinationLongitude, in: query, required: true, schema: { type: number, minimum: -180, maximum: 180 } }
+        - { name: destinationLatitude, in: query, required: true, schema: { type: number, minimum: -90, maximum: 90 } }
+      responses:
+        '200':
+          description: GCJ-02步行路线预览；后端不把路线折线当作WGS84持久化
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WalkingRoute' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '503': { $ref: '#/components/responses/Problem' }
+  /internal/emqx/authentication:
+    post:
+      tags: [Internal EMQX]
+      operationId: authenticateEmqxDevice
+      summary: EMQX验证设备连接凭据
+      security: []
+      x-internal: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmqxAuthenticationRequest' }
+      responses:
+        '200':
+          description: EMQX认证决定；凭据错误也返回200和deny
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EmqxAuthenticationResult' }
+        '400': { $ref: '#/components/responses/Problem' }
+  /internal/emqx/authorization:
+    post:
+      tags: [Internal EMQX]
+      operationId: authorizeEmqxDevice
+      summary: EMQX验证设备Topic发布权限
+      security: []
+      x-internal: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmqxAuthorizationRequest' }
+      responses:
+        '200':
+          description: 只允许设备发布自己的三个Topic
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EmqxAuthorizationResult' }
+        '400': { $ref: '#/components/responses/Problem' }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    DeviceId: { name: deviceId, in: path, required: true, schema: { type: string, format: uuid } }
+    TripId: { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+    IssueId: { name: issueId, in: path, required: true, schema: { type: string, format: uuid } }
+  responses:
+    Problem:
+      description: RFC 9457问题详情
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+  schemas:
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password, displayName]
+      properties:
+        email: { type: string, format: email, maxLength: 254 }
+        password: { type: string, minLength: 8, maxLength: 72, format: password, writeOnly: true }
+        displayName: { type: string, minLength: 1, maxLength: 80 }
+      example: { email: traveler@example.org, password: correct-horse-42, displayName: 小明 }
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 1, format: password, writeOnly: true }
+      example: { email: traveler@example.org, password: correct-horse-42 }
+    RefreshRequest:
+      type: object
+      additionalProperties: false
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string, minLength: 20, maxLength: 500, writeOnly: true }
+      example: { refreshToken: bw_refresh_example_token_1234567890 }
+    TokenResponse:
+      type: object
+      required: [accessToken, expiresInSeconds, refreshToken]
+      properties:
+        accessToken: { type: string }
+        expiresInSeconds: { type: integer, const: 900 }
+        refreshToken: { type: string }
+      example: { accessToken: eyJhbGciOiJIUzI1NiJ9.example, expiresInSeconds: 900, refreshToken: bw_refresh_example_token_1234567890 }
+    ProvisionDeviceRequest:
+      type: object
+      additionalProperties: false
+      required: [label]
+      properties:
+        label: { type: string, minLength: 1, maxLength: 80 }
+      example: { label: 树莓派-001 }
+    BindDeviceRequest:
+      type: object
+      additionalProperties: false
+      required: [deviceSecret]
+      properties:
+        deviceSecret: { type: string, minLength: 20, maxLength: 200, format: password, writeOnly: true }
+      example: { deviceSecret: RFhRzdsSQq8S7oeI9m6T6lFZ8uKwV6L18AkErvTxb6A }
+    Device:
+      type: object
+      required: [id, label, status, online, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        label: { type: string }
+        status: { enum: [PROVISIONED, ACTIVE, DISABLED] }
+        online: { type: boolean }
+        lastSeenAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+    ProvisionedDevice:
+      allOf:
+        - $ref: '#/components/schemas/Device'
+        - type: object
+          required: [deviceSecret]
+          properties:
+            deviceSecret: { type: string, description: 只返回一次的新设备密钥 }
+    RotatedDeviceSecret:
+      type: object
+      required: [deviceId, deviceSecret, rotatedAt]
+      properties:
+        deviceId: { type: string, format: uuid }
+        deviceSecret: { type: string, description: 只返回一次的新设备密钥 }
+        rotatedAt: { type: string, format: date-time }
+      example: { deviceId: cb94d02f-3843-41a4-8312-b549690ba21d, deviceSecret: RFhRzdsSQq8S7oeI9m6T6lFZ8uKwV6L18AkErvTxb6A, rotatedAt: '2026-08-05T01:30:00Z' }
+    StartTripRequest:
+      type: object
+      additionalProperties: false
+      required: [deviceId]
+      properties:
+        deviceId: { type: string, format: uuid }
+      example: { deviceId: cb94d02f-3843-41a4-8312-b549690ba21d }
+    Trip:
+      type: object
+      required: [id, deviceId, status, startedAt]
+      properties:
+        id: { type: string, format: uuid }
+        deviceId: { type: string, format: uuid }
+        status: { enum: [ACTIVE, COMPLETED, CANCELLED] }
+        startedAt: { type: string, format: date-time }
+        endedAt: { type: [string, 'null'], format: date-time }
+    TrackPointBatchRequest:
+      type: object
+      additionalProperties: false
+      required: [points]
+      properties:
+        points:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items: { $ref: '#/components/schemas/TrackPointInput' }
+      example:
+        points:
+          - { recordedAt: '2026-08-04T08:30:00Z', longitude: 116.397128, latitude: 39.916527, accuracyMeters: 8.5, speedMetersPerSecond: 1.1 }
+    TrackPointInput:
+      type: object
+      additionalProperties: false
+      required: [recordedAt, longitude, latitude, accuracyMeters]
+      properties:
+        recordedAt: { type: string, format: date-time }
+        longitude: { type: number, minimum: -180, maximum: 180 }
+        latitude: { type: number, minimum: -90, maximum: 90 }
+        accuracyMeters: { type: number, minimum: 0, maximum: 1000 }
+        speedMetersPerSecond: { type: [number, 'null'], minimum: 0 }
+    CreateIssueRequest:
+      type: object
+      additionalProperties: false
+      required: [type, description, severity, longitude, latitude]
+      properties:
+        type: { enum: [TACTILE_PAVING_DAMAGED, TACTILE_PAVING_MISSING, TACTILE_PAVING_INTERRUPTED, LONG_TERM_OCCUPATION, CONSTRUCTION, ACCESSIBLE_RAMP, AUDIBLE_SIGNAL, ACCESSIBLE_PLACE] }
+        description: { type: string, minLength: 1, maxLength: 1000 }
+        severity: { type: integer, minimum: 1, maximum: 5 }
+        longitude: { type: number, minimum: -180, maximum: 180 }
+        latitude: { type: number, minimum: -90, maximum: 90 }
+      example: { type: TACTILE_PAVING_DAMAGED, description: 盲道砖连续破损约两米, severity: 4, longitude: 116.397128, latitude: 39.916527 }
+    VerificationRequest:
+      type: object
+      additionalProperties: false
+      required: [decision]
+      properties:
+        decision: { enum: [CONFIRM, REJECT] }
+        note: { type: [string, 'null'], maxLength: 500 }
+      example: { decision: CONFIRM, note: 现场核验问题仍存在 }
+    EvidenceRequest:
+      type: object
+      additionalProperties: false
+      required: [mediaAssetId]
+      properties:
+        mediaAssetId: { type: string, format: uuid }
+      example: { mediaAssetId: 84c333d0-4247-4ea2-91d5-804f87ed63e4 }
+    AccessibilityIssue:
+      type: object
+      required: [id, type, description, status, severity, reportCount, confirmationCount, rejectionCount, confidenceScore, riskScore, version, longitude, latitude, lastReportedAt, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        type: { type: string }
+        description: { type: string }
+        status: { enum: [PENDING, VERIFIED, PROCESSING, REJECTED, RESOLVED, CLOSED, REOPENED] }
+        severity: { type: integer, minimum: 1, maximum: 5 }
+        reportCount: { type: integer, minimum: 1 }
+        confirmationCount: { type: integer, minimum: 0 }
+        rejectionCount: { type: integer, minimum: 0 }
+        confidenceScore: { type: integer, minimum: 0, maximum: 100 }
+        riskScore: { type: integer, minimum: 0, maximum: 50 }
+        version: { type: integer, minimum: 0 }
+        longitude: { type: number }
+        latitude: { type: number }
+        distanceMeters: { type: [number, 'null'] }
+        lastReportedAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+    IssueReport:
+      type: object
+      required: [id, source, type, description, severity, longitude, latitude, occurredAt]
+      properties:
+        id: { type: string, format: uuid }
+        reporterUserId: { type: [string, 'null'], format: uuid }
+        source: { enum: [USER, DEVICE_CANDIDATE, ADMIN_IMPORT] }
+        type: { type: string }
+        description: { type: string }
+        severity: { type: integer, minimum: 1, maximum: 5 }
+        longitude: { type: number }
+        latitude: { type: number }
+        occurredAt: { type: string, format: date-time }
+    TransitionIssueRequest:
+      type: object
+      additionalProperties: false
+      required: [targetStatus, reason, version]
+      properties:
+        targetStatus: { enum: [PENDING, VERIFIED, PROCESSING, REJECTED, RESOLVED, CLOSED, REOPENED] }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+        version: { type: integer, minimum: 0 }
+    RouteRiskRequest:
+      type: object
+      additionalProperties: false
+      required: [points]
+      properties:
+        points:
+          type: array
+          minItems: 2
+          maxItems: 500
+          items:
+            type: object
+            additionalProperties: false
+            required: [longitude, latitude]
+            properties:
+              longitude: { type: number, minimum: -180, maximum: 180 }
+              latitude: { type: number, minimum: -90, maximum: 90 }
+        corridorMeters: { type: [integer, 'null'], minimum: 5, maximum: 100, default: 30 }
+    RouteRiskAssessment:
+      type: object
+      required: [riskScore, riskLevel, issueCount, corridorMeters, issues]
+      properties:
+        riskScore: { type: integer, minimum: 0, maximum: 100 }
+        riskLevel: { enum: [LOW, MEDIUM, HIGH] }
+        issueCount: { type: integer, minimum: 0 }
+        corridorMeters: { type: integer }
+        issues:
+          type: array
+          items:
+            type: object
+            required: [issueId, type, severity, confidenceScore, distanceToRouteMeters, contribution]
+            properties:
+              issueId: { type: string, format: uuid }
+              type: { type: string }
+              severity: { type: integer }
+              confidenceScore: { type: integer }
+              distanceToRouteMeters: { type: number }
+              contribution: { type: integer }
+    MediaAsset:
+      type: object
+      required: [id, contentType, sizeBytes, accessUrl]
+      properties:
+        id: { type: string, format: uuid }
+        contentType: { enum: [image/jpeg, image/png, image/webp] }
+        sizeBytes: { type: integer, minimum: 1, maximum: 5242880 }
+        accessUrl: { type: string, format: uri }
+    MediaAccessUrl:
+      type: object
+      required: [accessUrl]
+      properties:
+        accessUrl: { type: string, format: uri }
+    ReverseGeocode:
+      type: object
+      required: [formattedAddress]
+      properties:
+        formattedAddress: { type: string }
+    WalkingRoute:
+      type: object
+      required: [distanceMeters, durationSeconds, polylineGcj02]
+      properties:
+        distanceMeters: { type: integer }
+        durationSeconds: { type: integer }
+        polylineGcj02: { type: string }
+    EmqxAuthenticationRequest:
+      type: object
+      additionalProperties: true
+      required: [username, clientid, password]
+      properties:
+        username: { type: string, format: uuid }
+        clientid: { type: string, format: uuid }
+        password: { type: string, writeOnly: true }
+      example: { username: cb94d02f-3843-41a4-8312-b549690ba21d, clientid: cb94d02f-3843-41a4-8312-b549690ba21d, password: device-secret }
+    EmqxAuthenticationResult:
+      type: object
+      required: [result, is_superuser]
+      properties:
+        result: { enum: [allow, deny] }
+        is_superuser: { type: boolean, const: false }
+    EmqxAuthorizationRequest:
+      type: object
+      additionalProperties: true
+      required: [username, clientid, action, topic]
+      properties:
+        username: { type: string, format: uuid }
+        clientid: { type: string, format: uuid }
+        action: { type: string, const: publish }
+        topic: { type: string }
+      example: { username: cb94d02f-3843-41a4-8312-b549690ba21d, clientid: cb94d02f-3843-41a4-8312-b549690ba21d, action: publish, topic: blindway/v1/devices/cb94d02f-3843-41a4-8312-b549690ba21d/heartbeat }
+    EmqxAuthorizationResult:
+      type: object
+      required: [result]
+      properties:
+        result: { enum: [allow, deny] }
+    Problem:
+      type: object
+      required: [status, code, title, detail, traceId, fieldErrors]
+      properties:
+        status: { type: integer }
+        code: { type: string }
+        title: { type: string }
+        detail: { type: string }
+        traceId: { type: string }
+        fieldErrors:
+          type: array
+          items:
+            type: object
+            required: [field, message]
+            properties:
+              field: { type: string }
+              message: { type: string }
+      example: { status: 400, code: VALIDATION_FAILED, title: 请求参数校验失败, detail: 请求包含无效字段, traceId: 01J4K9Z8M8Q1, fieldErrors: [{ field: longitude, message: 最大值不能超过180 }] }
+security:
+  - bearerAuth: []

@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npx --yes @redocly/cli@1.34.5 lint contracts/openapi.yaml
+      - run: npx --yes @asyncapi/cli@4.1.0 validate contracts/asyncapi.yaml
+      - name: Validate valid MQTT examples
+        shell: bash
+        run: |
+          npx --yes --package ajv-cli@5.0.0 --package ajv-formats@3.0.1 ajv validate --spec=draft2020 -c ajv-formats -s contracts/schemas/mqtt/heartbeat.schema.json -r contracts/schemas/mqtt/common-envelope.schema.json -d contracts/examples/mqtt/heartbeat.valid.json
+          npx --yes --package ajv-cli@5.0.0 --package ajv-formats@3.0.1 ajv validate --spec=draft2020 -c ajv-formats -s contracts/schemas/mqtt/path-event.schema.json -r contracts/schemas/mqtt/common-envelope.schema.json -d contracts/examples/mqtt/path-event.valid.json
+          npx --yes --package ajv-cli@5.0.0 --package ajv-formats@3.0.1 ajv validate --spec=draft2020 -c ajv-formats -s contracts/schemas/mqtt/obstacle-event.schema.json -r contracts/schemas/mqtt/common-envelope.schema.json -d contracts/examples/mqtt/obstacle-event.valid.json
+      - name: Invalid MQTT examples must fail validation
+        shell: bash
+        run: |
+          ! npx --yes --package ajv-cli@5.0.0 --package ajv-formats@3.0.1 ajv validate --spec=draft2020 -c ajv-formats -s contracts/schemas/mqtt/heartbeat.schema.json -r contracts/schemas/mqtt/common-envelope.schema.json -d contracts/examples/mqtt/heartbeat.invalid.json
+          ! npx --yes --package ajv-cli@5.0.0 --package ajv-formats@3.0.1 ajv validate --spec=draft2020 -c ajv-formats -s contracts/schemas/mqtt/path-event.schema.json -r contracts/schemas/mqtt/common-envelope.schema.json -d contracts/examples/mqtt/path-event.invalid.json
+          ! npx --yes --package ajv-cli@5.0.0 --package ajv-formats@3.0.1 ajv validate --spec=draft2020 -c ajv-formats -s contracts/schemas/mqtt/obstacle-event.schema.json -r contracts/schemas/mqtt/common-envelope.schema.json -d contracts/examples/mqtt/obstacle-event.invalid.json
+      - name: Build browsable contract documentation
+        run: npm run docs:build
+      - name: Reject REST breaking changes
+        if: github.event_name == 'pull_request'
+        uses: oasdiff/oasdiff-action/breaking@v0
+        with:
+          base: 'origin/${{ github.base_ref }}:contracts/openapi.yaml'
+          revision: 'HEAD:contracts/openapi.yaml'
+          fail-on: WARN
+          review: false
+      - name: Reject MQTT breaking changes
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          git show origin/${{ github.base_ref }}:contracts/asyncapi.yaml > target/asyncapi-base.yaml
+          npx --yes @asyncapi/cli@4.1.0 diff target/asyncapi-base.yaml contracts/asyncapi.yaml --type breaking --diagnostics-format pretty
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - run: mvn --batch-mode --update-snapshots verify
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-and-coverage-reports
+          path: |
+            target/surefire-reports
+            target/failsafe-reports
+            target/site/jacoco
+
+  codeql:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: java-kotlin
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - run: mvn --batch-mode -DskipTests package
+      - uses: github/codeql-action/analyze@v3

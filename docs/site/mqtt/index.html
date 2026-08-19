@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>BlindWay · MQTT契约</title>
+    <link rel="stylesheet" href="../styles.css">
+    <style>
+      body { background: #111311; }
+      .api-header, .api-main { width: min(1120px, calc(100% - 2rem)); margin-inline: auto; }
+      .api-header { padding: 5rem 0 3rem; border-bottom: 1px solid var(--line); }
+      .api-header h1 { font-size: clamp(3rem, 8vw, 7rem); }
+      .api-main { padding: 3rem 0 6rem; }
+      .back { color: var(--mint); text-decoration: none; font-weight: 700; }
+      .topic-list { display: grid; gap: 1rem; margin: 2rem 0 5rem; }
+      .topic { padding: 1.4rem; border: 1px solid var(--line); background: var(--panel); }
+      .topic code { overflow-wrap: anywhere; font-size: clamp(0.8rem, 2vw, 1rem); }
+      .schema { margin: 4rem 0; }
+      .schema h2 { font-size: clamp(2rem, 5vw, 4rem); }
+      .table-wrap { overflow-x: auto; }
+      table { width: 100%; border-collapse: collapse; background: var(--panel); }
+      th, td { padding: 0.8rem 1rem; border: 1px solid var(--line); text-align: left; vertical-align: top; }
+      th { color: var(--signal); font-size: 0.75rem; letter-spacing: 0.1em; }
+      td code { color: var(--mint); }
+      .links { display: flex; flex-wrap: wrap; gap: 0.7rem; margin-top: 1rem; }
+      .links a { padding: 0.55rem 0.8rem; border: 1px solid var(--line); text-decoration: none; }
+      .error { padding: 1rem; border-left: 4px solid #ff6b6b; background: #2a1717; }
+    </style>
+  </head>
+  <body>
+    <a class="skip-link" href="#mqtt-content">跳到MQTT契约</a>
+    <header class="api-header">
+      <a class="back" href="../">← 返回契约首页</a>
+      <p class="eyebrow" style="margin-top: 4rem">ASYNCAPI 3.1 / MQTT</p>
+      <h1>感知事件。</h1>
+      <p class="lede">本页从AsyncAPI和JSON Schema实时读取Topic与字段，不维护第二份字段表。</p>
+    </header>
+    <main class="api-main" id="mqtt-content">
+      <section aria-labelledby="topics-title">
+        <h2 id="topics-title">Topics</h2>
+        <div class="topic-list" id="topics" aria-live="polite"></div>
+      </section>
+      <div id="schemas" aria-live="polite"></div>
+      <section class="source-links" aria-label="MQTT源文件">
+        <a href="../contracts/asyncapi.yaml">AsyncAPI源文件</a>
+        <a href="../contracts/schemas/mqtt/common-envelope.schema.json">通用信封Schema</a>
+        <a href="../contracts/examples/mqtt/path-event.valid.json">合法样例</a>
+        <a href="../contracts/examples/mqtt/path-event.invalid.json">非法样例</a>
+      </section>
+    </main>
+    <script>
+      const contractRoot = "../contracts/";
+      const titles = {
+        "heartbeat.schema.json": "设备心跳",
+        "path-event.schema.json": "盲道观察",
+        "obstacle-event.schema.json": "障碍快照"
+      };
+
+      function typeOf(schema) {
+        if (schema.$ref) return schema.$ref.split("/").at(-1);
+        if (schema.enum) return schema.enum.join(" | ");
+        return Array.isArray(schema.type) ? schema.type.join(" | ") : (schema.type ?? "object");
+      }
+
+      function constraints(schema) {
+        const ignored = new Set(["type", "enum", "$ref", "properties", "items"]);
+        const values = Object.entries(schema).filter(([key]) => !ignored.has(key));
+        return values.length ? values.map(([key, value]) => `${key}=${JSON.stringify(value)}`).join(", ") : "—";
+      }
+
+      async function render() {
+        const asyncApi = await fetch(`${contractRoot}asyncapi.yaml`).then(response => {
+          if (!response.ok) throw new Error("无法读取AsyncAPI");
+          return response.text();
+        });
+        const addresses = [...asyncApi.matchAll(/^\s{4}address:\s*(.+)$/gm)].map(match => match[1]);
+        const schemaFiles = [...asyncApi.matchAll(/\.\/schemas\/mqtt\/([^\s]+)/g)].map(match => match[1]);
+
+        document.querySelector("#topics").innerHTML = addresses
+          .map((address, index) => `<article class="topic"><span class="number">0${index + 1}</span> <code>${address}</code></article>`)
+          .join("");
+
+        const schemaRoot = document.querySelector("#schemas");
+        for (const file of schemaFiles) {
+          const schema = await fetch(`${contractRoot}schemas/mqtt/${file}`).then(response => response.json());
+          const payload = schema.allOf?.[1]?.properties?.payload ?? {};
+          const required = new Set(payload.required ?? []);
+          const rows = Object.entries(payload.properties ?? {}).map(([name, value]) => `
+            <tr>
+              <td><code>${name}</code></td>
+              <td>${required.has(name) ? "是" : "否"}</td>
+              <td>${typeOf(value)}</td>
+              <td>${constraints(value)}</td>
+            </tr>`).join("");
+          const exampleBase = file.replace(".schema.json", "");
+          schemaRoot.insertAdjacentHTML("beforeend", `
+            <section class="schema">
+              <p class="eyebrow">PAYLOAD SCHEMA</p>
+              <h2>${titles[file] ?? file}</h2>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>字段</th><th>必填</th><th>类型</th><th>约束</th></tr></thead>
+                  <tbody>${rows}</tbody>
+                </table>
+              </div>
+              <div class="links">
+                <a href="${contractRoot}schemas/mqtt/${file}">JSON Schema</a>
+                <a href="${contractRoot}examples/mqtt/${exampleBase}.valid.json">合法样例</a>
+                <a href="${contractRoot}examples/mqtt/${exampleBase}.invalid.json">非法样例</a>
+              </div>
+            </section>`);
+        }
+      }
+
+      render().catch(error => {
+        document.querySelector("#schemas").innerHTML = `<p class="error">${error.message}。请通过文档服务器访问，不要直接双击HTML文件。</p>`;
+      });
+    </script>
+  </body>
+</html>

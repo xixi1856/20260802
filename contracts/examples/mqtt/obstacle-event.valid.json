@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "1.0",
+  "eventId": "77e137bc-ad4f-4e55-871e-c223cc3a6eb1",
+  "deviceId": "cb94d02f-3843-41a4-8312-b549690ba21d",
+  "tripId": "efb98a51-f232-4de4-bf5f-704a843cc9c6",
+  "bootId": "4fc08d04-e62e-4eed-aa46-410bebd3d498",
+  "sequenceNo": 1026,
+  "occurredAt": "2026-08-04T08:30:03.120Z",
+  "sentAt": "2026-08-04T08:30:03.180Z",
+  "payload": {
+    "tactileCorridorConfidence": 0.88,
+    "warningThresholdMeters": 3.0,
+    "minimumDistanceMeters": 1.8,
+    "processingLatencyMs": 96,
+    "obstacles": [
+      {
+        "category": "PERSON",
+        "confidence": 0.94,
+        "distanceMeters": 1.8,
+        "distanceQuality": "MEDIUM",
+        "relativePosition": "CENTER",
+        "boundingBox": { "x": 0.38, "y": 0.24, "width": 0.21, "height": 0.63 }
+      }
+    ]
+  }
+}

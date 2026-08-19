@@ -1,0 +1,29 @@
+name: Contract documentation
+
+on:
+  push:
+    branches: [main]
+    paths: ['contracts/**', 'docs/site/**', 'scripts/*contract-docs.mjs', 'package.json', '.github/workflows/docs.yml']
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  pages:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm run docs:build
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: target/contract-docs/site
+      - uses: actions/deploy-pages@v4
+        id: deployment

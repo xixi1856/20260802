@@ -1,0 +1,27 @@
+name: Feature
+description: 新业务能力或接口变更
+title: "feat: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 业务问题
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 验收条件
+    validations:
+      required: true
+  - type: checkboxes
+    id: impact
+    attributes:
+      label: 影响面
+      options:
+        - label: REST契约
+        - label: MQTT契约
+        - label: 数据库迁移
+        - label: 隐私或安全
+        - label: 监控与性能

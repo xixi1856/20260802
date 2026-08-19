@@ -1,0 +1,196 @@
+:root {
+  color-scheme: dark;
+  --ink: #f5f1e8;
+  --muted: #bdb8ad;
+  --paper: #111311;
+  --panel: #1b1e1b;
+  --line: #42473f;
+  --signal: #f2d024;
+  --mint: #90e0c0;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  background:
+    linear-gradient(90deg, transparent 49.8%, rgba(255, 255, 255, 0.035) 50%, transparent 50.2%),
+    var(--paper);
+  color: var(--ink);
+  font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif;
+  line-height: 1.65;
+}
+
+a { color: inherit; }
+
+.skip-link {
+  position: fixed;
+  left: 1rem;
+  top: -5rem;
+  z-index: 10;
+  padding: 0.7rem 1rem;
+  background: var(--signal);
+  color: #111;
+  font-weight: 700;
+}
+
+.skip-link:focus { top: 1rem; }
+
+.hero,
+main,
+footer {
+  width: min(1120px, calc(100% - 2rem));
+  margin-inline: auto;
+}
+
+.hero {
+  position: relative;
+  min-height: 70vh;
+  display: grid;
+  align-content: center;
+  padding: 6rem 0 4rem;
+  overflow: hidden;
+}
+
+.eyebrow,
+.kind {
+  margin: 0 0 1rem;
+  color: var(--signal);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+}
+
+h1,
+h2 {
+  font-family: Georgia, "Noto Serif SC", serif;
+  font-weight: 500;
+  line-height: 1.02;
+}
+
+h1 {
+  max-width: 800px;
+  margin: 0;
+  font-size: clamp(3.8rem, 10vw, 8.5rem);
+  letter-spacing: -0.055em;
+}
+
+.lede {
+  max-width: 640px;
+  margin: 2rem 0;
+  color: var(--muted);
+  font-size: clamp(1rem, 2vw, 1.25rem);
+}
+
+.status {
+  width: fit-content;
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--line);
+  font-family: Consolas, monospace;
+  font-size: 0.78rem;
+}
+
+.status span {
+  display: inline-block;
+  width: 0.55rem;
+  height: 0.55rem;
+  margin-right: 0.5rem;
+  border-radius: 50%;
+  background: var(--mint);
+  box-shadow: 0 0 0 4px rgba(144, 224, 192, 0.12);
+}
+
+.tactile-line {
+  position: absolute;
+  right: 2%;
+  top: 12%;
+  display: grid;
+  grid-template-columns: repeat(5, 1.3rem);
+  gap: 1rem;
+  transform: rotate(-18deg);
+  opacity: 0.9;
+}
+
+.tactile-line span {
+  width: 1.3rem;
+  height: 16rem;
+  border-radius: 999px;
+  background: var(--signal);
+  box-shadow: 0 0 2rem rgba(242, 208, 36, 0.16);
+}
+
+.contract-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  border: 1px solid var(--line);
+}
+
+.contract-card {
+  position: relative;
+  min-height: 390px;
+  padding: clamp(1.5rem, 4vw, 3.5rem);
+  background: var(--panel);
+  text-decoration: none;
+  transition: background 180ms ease, transform 180ms ease;
+}
+
+.contract-card + .contract-card { border-left: 1px solid var(--line); }
+.contract-card:hover { background: #242824; }
+.contract-card:focus-visible { outline: 4px solid var(--signal); outline-offset: -4px; }
+.contract-card .number { color: var(--muted); font-family: Consolas, monospace; }
+.contract-card h2 { margin: 4rem 0 1rem; font-size: clamp(2.5rem, 6vw, 5rem); }
+.contract-card p:not(.kind) { max-width: 34ch; color: var(--muted); }
+.contract-card strong { position: absolute; bottom: 3rem; color: var(--signal); }
+.contract-card.mqtt strong, .contract-card.mqtt .kind { color: var(--mint); }
+
+.rules {
+  display: grid;
+  grid-template-columns: 0.8fr 1.2fr;
+  gap: 4rem;
+  padding: 8rem 0;
+}
+
+.rules h2 { margin: 0; font-size: clamp(2rem, 4vw, 4rem); }
+.rules ol { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+.rules li { padding: 1.2rem 0; border-bottom: 1px solid var(--line); color: var(--muted); }
+.rules li span { display: inline-block; min-width: 5rem; color: var(--ink); font-weight: 700; }
+
+.source-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding-bottom: 5rem;
+}
+
+.source-links a {
+  padding: 0.65rem 0.9rem;
+  border: 1px solid var(--line);
+  text-decoration: none;
+}
+
+.source-links a:hover,
+.source-links a:focus-visible { border-color: var(--signal); color: var(--signal); }
+
+footer {
+  padding: 2rem 0 3rem;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+code { color: var(--mint); font-family: Consolas, monospace; }
+
+@media (max-width: 720px) {
+  .hero { min-height: 620px; }
+  .tactile-line { right: -18%; top: 4%; transform: rotate(-25deg) scale(0.65); opacity: 0.3; }
+  .contract-grid, .rules { grid-template-columns: 1fr; }
+  .contract-card + .contract-card { border-left: 0; border-top: 1px solid var(--line); }
+  .rules { gap: 2rem; padding: 5rem 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { transition-duration: 0.01ms !important; }
+}

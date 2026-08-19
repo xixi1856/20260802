@@ -1,0 +1,9 @@
+{
+  "name": "blindway-contract-docs",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "docs:build": "node scripts/build-contract-docs.mjs",
+    "docs:serve": "npm run docs:build && node scripts/serve-contract-docs.mjs"
+  }
+}

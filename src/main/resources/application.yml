@@ -1,0 +1,78 @@
+spring:
+  application:
+    name: blindway-backend
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/blindway}
+    username: ${DATABASE_USERNAME:blindway}
+    password: ${DATABASE_PASSWORD:blindway}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  jackson:
+    time-zone: UTC
+    deserialization:
+      fail-on-unknown-properties: true
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
+  modulith:
+    runtime:
+      verification-enabled: true
+
+mybatis:
+  type-handlers-package: com.blindway.common.infrastructure
+  configuration:
+    map-underscore-to-camel-case: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+server:
+  shutdown: graceful
+  forward-headers-strategy: framework
+
+logging:
+  structured:
+    format:
+      console: logstash
+
+blindway:
+  security:
+    jwt-secret: ${JWT_SECRET:local-development-secret-change-me-32-bytes}
+    access-token-ttl: PT15M
+    refresh-token-ttl: P7D
+  mqtt:
+    enabled: ${MQTT_ENABLED:false}
+    broker-uri: ${MQTT_BROKER_URI:tcp://localhost:1883}
+    client-id: ${MQTT_CLIENT_ID:blindway-backend-local}
+    username: ${MQTT_BACKEND_USERNAME:blindway-backend}
+    password: ${MQTT_BACKEND_PASSWORD:blindway-backend}
+    max-payload-bytes: 32768
+  minio:
+    enabled: ${MINIO_ENABLED:false}
+    endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+    access-key: ${MINIO_ACCESS_KEY:blindway}
+    secret-key: ${MINIO_SECRET_KEY:blindway-change-me}
+    bucket: ${MINIO_BUCKET:blindway-media}
+    presigned-url-ttl: PT10M
+  amap:
+    base-url: https://restapi.amap.com
+    web-key: ${AMAP_WEB_KEY:}
+    connect-timeout: PT1S
+    read-timeout: PT3S

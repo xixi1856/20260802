@@ -1,0 +1,24 @@
+@baseUrl = http://localhost:8080/api/v1
+@accessToken = replace-after-login
+@deviceId = 00000000-0000-0000-0000-000000000000
+@tripId = 00000000-0000-0000-0000-000000000000
+
+### Register
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{"email":"demo@example.com","password":"password123","displayName":"Demo"}
+
+### Start trip
+POST {{baseUrl}}/trips
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{"deviceId":"{{deviceId}}"}
+
+### Upload WGS84 track points
+POST {{baseUrl}}/trips/{{tripId}}/track-points
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{"points":[{"recordedAt":"2026-08-04T08:30:00Z","longitude":116.397128,"latitude":39.916527,"accuracyMeters":8.5,"speedMetersPerSecond":1.1}]}

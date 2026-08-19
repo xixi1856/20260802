@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blindway.example/schemas/mqtt/path-event.schema.json",
+  "allOf": [
+    { "$ref": "common-envelope.schema.json" },
+    {
+      "type": "object",
+      "properties": {
+        "payload": {
+          "type": "object",
+          "required": ["state", "confidence", "measurementQuality", "processingLatencyMs"],
+          "properties": {
+            "state": { "enum": ["LEFT", "CENTER", "RIGHT", "NOT_DETECTED"] },
+            "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+            "nearestDistanceMeters": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+            "lateralOffsetMeters": { "type": ["number", "null"] },
+            "measurementQuality": { "enum": ["HIGH", "MEDIUM", "LOW", "UNAVAILABLE"] },
+            "processingLatencyMs": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": false
+        }
+      }
+    }
+  ]
+}

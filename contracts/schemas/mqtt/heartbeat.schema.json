@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blindway.example/schemas/mqtt/heartbeat.schema.json",
+  "allOf": [
+    { "$ref": "common-envelope.schema.json" },
+    {
+      "type": "object",
+      "properties": {
+        "payload": {
+          "type": "object",
+          "required": [
+            "softwareVersion",
+            "modelVersion",
+            "uptimeSeconds",
+            "cpuUsagePercent",
+            "memoryUsagePercent",
+            "diskUsagePercent",
+            "cameraStatus",
+            "stereoStatus",
+            "inferenceStatus",
+            "clockSynchronized"
+          ],
+          "properties": {
+            "softwareVersion": { "type": "string", "maxLength": 64 },
+            "modelVersion": { "type": "string", "maxLength": 128 },
+            "configVersion": { "type": ["string", "null"], "maxLength": 64 },
+            "uptimeSeconds": { "type": "integer", "minimum": 0 },
+            "cpuTemperatureC": { "type": ["number", "null"], "minimum": -40, "maximum": 125 },
+            "cpuUsagePercent": { "type": "number", "minimum": 0, "maximum": 100 },
+            "memoryUsagePercent": { "type": "number", "minimum": 0, "maximum": 100 },
+            "diskUsagePercent": { "type": "number", "minimum": 0, "maximum": 100 },
+            "inferenceFps": { "type": ["number", "null"], "minimum": 0 },
+            "averageInferenceLatencyMs": { "type": ["integer", "null"], "minimum": 0 },
+            "networkType": { "enum": ["WIFI", "CELLULAR", "ETHERNET", "UNKNOWN"] },
+            "signalDbm": { "type": ["integer", "null"], "minimum": -150, "maximum": 0 },
+            "cameraStatus": { "$ref": "#/$defs/componentStatus" },
+            "stereoStatus": { "$ref": "#/$defs/componentStatus" },
+            "inferenceStatus": { "$ref": "#/$defs/componentStatus" },
+            "clockSynchronized": { "type": "boolean" },
+            "pendingEventCount": { "type": "integer", "minimum": 0 },
+            "droppedEventCount": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": false
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "componentStatus": { "enum": ["UP", "DEGRADED", "DOWN"] }
+  }
+}

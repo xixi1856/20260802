@@ -1,0 +1,7 @@
+{
+  "type": "TACTILE_PAVING_DAMAGED",
+  "description": "盲道砖连续破损约两米",
+  "severity": 4,
+  "longitude": 116.397128,
+  "latitude": 39.916527
+}

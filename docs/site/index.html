@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="BlindWay REST与MQTT接口契约入口">
+    <title>BlindWay · 接口契约</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#contracts">跳到接口契约</a>
+    <header class="hero">
+      <div class="tactile-line" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+      <p class="eyebrow">BLINDWAY / CONTRACT FIRST</p>
+      <h1>可以被验证的<br>接口说明。</h1>
+      <p class="lede">手机、树莓派和后端共享同一份机器可读契约。页面由源文件自动生成，不手工复制字段。</p>
+      <div class="status" role="status"><span aria-hidden="true"></span> REST v1 · MQTT v1 · WGS84</div>
+    </header>
+
+    <main id="contracts">
+      <section class="contract-grid" aria-label="接口文档入口">
+        <a class="contract-card rest" href="./rest/">
+          <span class="number">01</span>
+          <p class="kind">HTTP / JSON</p>
+          <h2>REST API</h2>
+          <p>认证、设备、行程、轨迹、社区、媒体与高德服务。</p>
+          <strong>打开 Redoc <span aria-hidden="true">↗</span></strong>
+        </a>
+        <a class="contract-card mqtt" href="./mqtt/">
+          <span class="number">02</span>
+          <p class="kind">MQTT / JSON</p>
+          <h2>感知事件</h2>
+          <p>设备心跳、盲道观察与盲道走廊内障碍快照。</p>
+          <strong>打开 AsyncAPI <span aria-hidden="true">↗</span></strong>
+        </a>
+      </section>
+
+      <section class="rules" aria-labelledby="rules-title">
+        <div>
+          <p class="eyebrow">BOUNDARIES</p>
+          <h2 id="rules-title">先记住边界，再调用接口。</h2>
+        </div>
+        <ol>
+          <li><span>位置</span>手机上传WGS84；树莓派消息不携带GPS。</li>
+          <li><span>安全</span>本地提醒不等待MQTT或Java后端。</li>
+          <li><span>社区</span>动态行人和车辆不会自动形成长期风险点。</li>
+          <li><span>秘密</span>设备密钥只在配置或轮换响应中出现一次。</li>
+        </ol>
+      </section>
+
+      <nav class="source-links" aria-label="契约源文件">
+        <a href="./contracts/openapi.yaml">OpenAPI源文件</a>
+        <a href="./contracts/asyncapi.yaml">AsyncAPI源文件</a>
+        <a href="./contracts/examples/rest/register.valid.json">REST合法样例</a>
+        <a href="./contracts/examples/mqtt/path-event.valid.json">MQTT合法样例</a>
+      </nav>
+    </main>
+
+    <footer>由 <code>npm run docs:build</code> 从 <code>contracts/</code> 生成</footer>
+  </body>
+</html>

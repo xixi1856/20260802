@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blindway.example/schemas/mqtt/obstacle-event.schema.json",
+  "allOf": [
+    { "$ref": "common-envelope.schema.json" },
+    {
+      "type": "object",
+      "properties": {
+        "payload": {
+          "type": "object",
+          "required": [
+            "tactileCorridorConfidence",
+            "warningThresholdMeters",
+            "minimumDistanceMeters",
+            "processingLatencyMs",
+            "obstacles"
+          ],
+          "properties": {
+            "tactileCorridorConfidence": { "type": "number", "minimum": 0, "maximum": 1 },
+            "warningThresholdMeters": { "type": "number", "exclusiveMinimum": 0, "maximum": 10 },
+            "minimumDistanceMeters": { "type": "number", "exclusiveMinimum": 0, "maximum": 10 },
+            "processingLatencyMs": { "type": "integer", "minimum": 0 },
+            "obstacles": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 20,
+              "items": { "$ref": "#/$defs/obstacle" }
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "obstacle": {
+      "type": "object",
+      "required": ["category", "confidence", "distanceMeters", "distanceQuality", "relativePosition", "boundingBox"],
+      "properties": {
+        "category": { "enum": ["PERSON", "VEHICLE", "TWO_WHEELER", "STATIC_OBJECT", "UNKNOWN"] },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "distanceMeters": { "type": "number", "exclusiveMinimum": 0, "maximum": 10 },
+        "distanceQuality": { "enum": ["HIGH", "MEDIUM", "LOW", "UNAVAILABLE"] },
+        "relativePosition": { "enum": ["LEFT", "CENTER", "RIGHT"] },
+        "boundingBox": {
+          "type": "object",
+          "required": ["x", "y", "width", "height"],
+          "properties": {
+            "x": { "type": "number", "minimum": 0, "maximum": 1 },
+            "y": { "type": "number", "minimum": 0, "maximum": 1 },
+            "width": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+            "height": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

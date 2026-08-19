@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "1.0",
+  "eventId": "4c17239e-c197-48a9-91b4-a3a3aa1f6878",
+  "deviceId": "cb94d02f-3843-41a4-8312-b549690ba21d",
+  "tripId": "efb98a51-f232-4de4-bf5f-704a843cc9c6",
+  "bootId": "4fc08d04-e62e-4eed-aa46-410bebd3d498",
+  "sequenceNo": 1025,
+  "occurredAt": "2026-08-04T08:30:00.120Z",
+  "sentAt": "2026-08-04T08:30:00.180Z",
+  "payload": {
+    "tactileCorridorConfidence": 0.88,
+    "warningThresholdMeters": 3.0,
+    "minimumDistanceMeters": 12.0,
+    "processingLatencyMs": 96,
+    "obstacles": []
+  }
+}

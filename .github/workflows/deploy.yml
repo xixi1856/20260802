@@ -1,0 +1,43 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [Container image]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: choice
+        options: [staging, production]
+        default: staging
+      imageTag:
+        description: Existing immutable GHCR tag; production should use a tested commit SHA or vX.Y.Z.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    environment: ${{ inputs.environment || 'staging' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: appleboy/ssh-action@v1.2.2
+        env:
+          BACKEND_IMAGE: ghcr.io/${{ github.repository }}:${{ github.event.workflow_run.head_sha || inputs.imageTag || github.sha }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          envs: BACKEND_IMAGE
+          script_stop: true
+          script: |
+            cd /opt/blindway/${{ inputs.environment || 'staging' }}
+            docker compose pull backend
+            docker compose run --rm backend --spring.flyway.enabled=true --spring.main.web-application-type=none
+            docker compose up -d --no-deps backend
+            curl --fail --retry 10 --retry-delay 3 https://${{ secrets.API_HOST }}/actuator/health/readiness

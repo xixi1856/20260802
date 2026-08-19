@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "1.0",
+  "eventId": "f175ac94-04d1-4f18-a2d1-a1fb053547d2",
+  "deviceId": "cb94d02f-3843-41a4-8312-b549690ba21d",
+  "tripId": null,
+  "bootId": "4fc08d04-e62e-4eed-aa46-410bebd3d498",
+  "sequenceNo": 1024,
+  "occurredAt": "2026-08-04T08:30:00.120Z",
+  "sentAt": "2026-08-04T08:30:00.180Z",
+  "payload": {
+    "softwareVersion": "pi-1.0.0",
+    "modelVersion": "blindway-yololite-1.0.0",
+    "configVersion": "config-1.0",
+    "uptimeSeconds": 3600,
+    "cpuTemperatureC": 55.2,
+    "cpuUsagePercent": 42.1,
+    "memoryUsagePercent": 61.0,
+    "diskUsagePercent": 48.0,
+    "inferenceFps": 12.5,
+    "averageInferenceLatencyMs": 78,
+    "networkType": "WIFI",
+    "signalDbm": -61,
+    "cameraStatus": "UP",
+    "stereoStatus": "UP",
+    "inferenceStatus": "UP",
+    "clockSynchronized": true,
+    "pendingEventCount": 3,
+    "droppedEventCount": 0
+  }
+}

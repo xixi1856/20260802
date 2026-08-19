@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blindway.example/schemas/mqtt/common-envelope.schema.json",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "eventId",
+    "deviceId",
+    "bootId",
+    "sequenceNo",
+    "occurredAt",
+    "sentAt",
+    "payload"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "eventId": { "type": "string", "format": "uuid" },
+    "deviceId": { "type": "string", "format": "uuid" },
+    "tripId": { "type": ["string", "null"], "format": "uuid" },
+    "bootId": { "type": "string", "format": "uuid" },
+    "sequenceNo": { "type": "integer", "minimum": 1 },
+    "occurredAt": { "type": "string", "format": "date-time" },
+    "sentAt": { "type": "string", "format": "date-time" },
+    "payload": { "type": "object" }
+  },
+  "additionalProperties": false
+}
