@@ -60,9 +60,14 @@ export function setup() {
   return loginAllUsers();
 }
 
+function centeredSequence(iteration, multiplier) {
+  return ((iteration * multiplier) % 10007) / 10006 - 0.5;
+}
+
 export function nearbyIssues(data) {
-  const longitude = 116.397128 + (Math.random() - 0.5) * 0.01;
-  const latitude = 39.916527 + (Math.random() - 0.5) * 0.01;
+  const iteration = exec.scenario.iterationInTest;
+  const longitude = 116.397128 + centeredSequence(iteration, 7919) * 0.01;
+  const latitude = 39.916527 + centeredSequence(iteration, 6271) * 0.01;
   const response = http.get(
     `${BASE_URL}/accessibility-issues?longitude=${longitude}&latitude=${latitude}&radiusMeters=500&limit=20`,
     authParams('nearby-issues', data),
@@ -109,14 +114,15 @@ export function trackPoints(data) {
 }
 
 export function createIssue(data) {
+  const iteration = exec.scenario.iterationInTest;
   const response = http.post(
     `${BASE_URL}/accessibility-issues`,
     JSON.stringify({
       type: 'LONG_TERM_OCCUPATION',
       description: `LOAD_MIX_${__VU}_${__ITER}`,
       severity: 3,
-      longitude: 116.397128 + (Math.random() - 0.5) * 0.02,
-      latitude: 39.916527 + (Math.random() - 0.5) * 0.02,
+      longitude: 116.397128 + centeredSequence(iteration, 7919) * 0.02,
+      latitude: 39.916527 + centeredSequence(iteration, 6271) * 0.02,
     }),
     authParams('create-issue', data),
   );

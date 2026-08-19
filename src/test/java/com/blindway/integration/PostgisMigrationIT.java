@@ -31,10 +31,12 @@ class PostgisMigrationIT {
                         POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
                 var statement = connection.createStatement();
                 var result = statement.executeQuery(
-                        "SELECT postgis_version(), to_regclass('public.obstacle_event') IS NOT NULL")) {
+                        "SELECT postgis_version(), to_regclass('public.obstacle_event') IS NOT NULL, "
+                                + "to_regclass('public.idx_issue_active_risk_score') IS NOT NULL")) {
             assertThat(result.next()).isTrue();
             assertThat(result.getString(1)).isNotBlank();
             assertThat(result.getBoolean(2)).isTrue();
+            assertThat(result.getBoolean(3)).isTrue();
         }
     }
 }

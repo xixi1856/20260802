@@ -32,7 +32,21 @@ $env:REPORT_RATE='2'
 k6 run --summary-export load\results\business-mix.json load\k6-business-mix.js
 ```
 
-可用环境变量：`BASE_URL`、`MAX_RATE`、`RATE`、`DURATION`、`BATCH_SIZE`、`CORRIDOR_METERS`，以及混合场景中的四个 `*_RATE` 和 `ROUTE_CORRIDOR_METERS`。
+可用环境变量：`BASE_URL`、`MAX_RATE`、`RATE`、`DURATION`、`BATCH_SIZE`、`CORRIDOR_METERS`、`POINT_COUNT`，以及混合场景中的四个 `*_RATE` 和 `ROUTE_CORRIDOR_METERS`。路线脚本的 `POINT_COUNT` 可在 2 到 500 之间调整，不同点数保持相同起终点，便于单独评估分段索引探测成本。
+
+### 带资源采样的混合容量测试
+
+```powershell
+& .\load\run-profiled-business-mix.ps1 `
+  -ResultName capacity-27rps `
+  -Duration 3m `
+  -NearbyRate 15 `
+  -RouteRate 3 `
+  -TrackRate 7 `
+  -ReportRate 2
+```
+
+脚本同时保存 k6 汇总、标准输出以及约每 5 秒一次的 Hikari 和 Docker 容器资源采样。指标 CSV 的 `phase=setup` 是批量登录阶段，容量分析只使用 `phase=business`。所有本地结果位于 `load/results/`，该目录不会提交到 Git。
 
 ## 3. MQTT 压测
 

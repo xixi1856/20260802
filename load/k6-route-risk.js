@@ -6,6 +6,11 @@ import { authParams, BASE_URL, loginAllUsers } from './lib/common.js';
 const rate = Number(__ENV.RATE || 10);
 const duration = __ENV.DURATION || '30s';
 const corridorMeters = Number(__ENV.CORRIDOR_METERS || 20);
+const pointCount = Number(__ENV.POINT_COUNT || 20);
+
+if (pointCount < 2 || pointCount > 500) {
+  throw new Error('POINT_COUNT must be between 2 and 500');
+}
 
 export const options = {
   scenarios: {
@@ -34,10 +39,11 @@ export function setup() {
 export function assessRoute(data) {
   const shift = ((exec.scenario.iterationInTest % 11) - 5) * 0.00002;
   const points = [];
-  for (let index = 0; index < 20; index += 1) {
+  for (let index = 0; index < pointCount; index += 1) {
+    const progress = index / (pointCount - 1);
     points.push({
-      longitude: 116.392 + index * 0.00055 + shift,
-      latitude: 39.912 + index * 0.00045 - shift,
+      longitude: 116.392 + progress * 0.01045 + shift,
+      latitude: 39.912 + progress * 0.00855 - shift,
     });
   }
 

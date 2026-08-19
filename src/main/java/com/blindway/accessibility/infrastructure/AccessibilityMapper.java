@@ -112,20 +112,56 @@ public interface AccessibilityMapper {
 
     @Select(
             """
-            SELECT id, reporter_user_id, type, description, status, severity, report_count,
-                   confirmation_count, rejection_count, confidence_score,
-                   (severity * confidence_score / 10)::integer AS risk_score, version,
-                   ST_X(location::geometry) AS longitude,
-                   ST_Y(location::geometry) AS latitude,
-                   ST_Distance(location,
-                       ST_SetSRID(ST_MakePoint(#{longitude}, #{latitude}), 4326)::geography,
-                       false) AS distance_meters,
-                   last_reported_at, created_at, updated_at
-            FROM accessibility_issue
-            WHERE status IN ('PENDING', 'VERIFIED', 'PROCESSING')
-              AND ST_DWithin(location,
-                  ST_SetSRID(ST_MakePoint(#{longitude}, #{latitude}), 4326)::geography,
-                  #{radiusMeters}, false)
+            WITH RECURSIVE params AS MATERIALIZED (
+                SELECT ST_SetSRID(ST_MakePoint(#{longitude}, #{latitude}), 4326)::geography AS origin
+            ), risk_cutoff(risk_score, cumulative_count) AS (
+                SELECT 50, (
+                    SELECT count(*)
+                    FROM (
+                        SELECT 1
+                        FROM accessibility_issue candidate
+                        CROSS JOIN params
+                        WHERE candidate.status IN ('PENDING', 'VERIFIED', 'PROCESSING')
+                          AND (candidate.severity * candidate.confidence_score / 10)::integer = 50
+                          AND ST_DWithin(candidate.location, params.origin, #{radiusMeters}, false)
+                        LIMIT #{limit}
+                    ) matches
+                )
+                UNION ALL
+                SELECT current.risk_score - 1, current.cumulative_count + (
+                    SELECT count(*)
+                    FROM (
+                        SELECT 1
+                        FROM accessibility_issue candidate
+                        CROSS JOIN params
+                        WHERE candidate.status IN ('PENDING', 'VERIFIED', 'PROCESSING')
+                          AND (candidate.severity * candidate.confidence_score / 10)::integer
+                              = current.risk_score - 1
+                          AND ST_DWithin(candidate.location, params.origin, #{radiusMeters}, false)
+                        LIMIT #{limit}
+                    ) matches
+                )
+                FROM risk_cutoff current
+                WHERE current.cumulative_count < #{limit}
+                  AND current.risk_score > 0
+            ), cutoff AS MATERIALIZED (
+                SELECT min(risk_score) AS risk_score
+                FROM risk_cutoff
+            )
+            SELECT issue.id, issue.reporter_user_id, issue.type, issue.description, issue.status,
+                   issue.severity, issue.report_count, issue.confirmation_count, issue.rejection_count,
+                   issue.confidence_score,
+                   (issue.severity * issue.confidence_score / 10)::integer AS risk_score, issue.version,
+                   ST_X(issue.location::geometry) AS longitude,
+                   ST_Y(issue.location::geometry) AS latitude,
+                   ST_Distance(issue.location, params.origin, false) AS distance_meters,
+                   issue.last_reported_at, issue.created_at, issue.updated_at
+            FROM accessibility_issue issue
+            CROSS JOIN params
+            CROSS JOIN cutoff
+            WHERE issue.status IN ('PENDING', 'VERIFIED', 'PROCESSING')
+              AND (issue.severity * issue.confidence_score / 10)::integer >= cutoff.risk_score
+              AND ST_DWithin(issue.location, params.origin, #{radiusMeters}, false)
             ORDER BY risk_score DESC, distance_meters, last_reported_at DESC
             LIMIT #{limit}
             """)
