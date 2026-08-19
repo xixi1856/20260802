@@ -227,21 +227,36 @@ public interface AccessibilityMapper {
             @Param("rejects") int rejects,
             @Param("now") Instant now);
 
+    @Select("SELECT set_config('statement_timeout', #{timeout}, true)")
+    String setLocalStatementTimeout(String timeout);
+
     @Select(
             """
             WITH route AS MATERIALIZED (
                 SELECT ST_SetSRID(ST_GeomFromText(#{lineStringWkt}), 4326)::geography AS path
-            ), segments AS MATERIALIZED (
-                SELECT dumped.geom::geography AS path
+            ), candidate_route AS MATERIALIZED (
+                SELECT path,
+                       CASE
+                           WHEN ST_NPoints(path::geometry) <= 20 THEN path::geometry
+                           ELSE ST_Segmentize(
+                               ST_SimplifyPreserveTopology(path::geometry, 5.0 / 111320.0)::geography,
+                               75.0)::geometry
+                       END AS path_for_candidates,
+                       CASE WHEN ST_NPoints(path::geometry) <= 20 THEN 0.0 ELSE 5.0 END
+                           AS tolerance_meters
                 FROM route
-                CROSS JOIN LATERAL ST_DumpSegments(route.path::geometry) AS dumped
+            ), segments AS MATERIALIZED (
+                SELECT dumped.geom::geography AS path, candidate_route.tolerance_meters
+                FROM candidate_route
+                CROSS JOIN LATERAL ST_DumpSegments(candidate_route.path_for_candidates) AS dumped
             ), candidate_ids AS MATERIALIZED (
                 SELECT DISTINCT issue.id
                 FROM segments
                 JOIN accessibility_issue issue
                   ON issue.status IN ('PENDING', 'VERIFIED', 'PROCESSING')
                  AND issue.confidence_score >= 20
-                 AND ST_DWithin(issue.location, segments.path, #{corridorMeters}, false)
+                 AND ST_DWithin(
+                     issue.location, segments.path, #{corridorMeters} + segments.tolerance_meters, false)
             ), distances AS MATERIALIZED (
                 SELECT issue.id AS issue_id, issue.type, issue.severity, issue.confidence_score,
                        issue.last_reported_at,
@@ -255,6 +270,7 @@ public interface AccessibilityMapper {
                        * GREATEST(0.25, 1 - EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - last_reported_at)) / 2592000.0)
                        * (1 - distance_to_route_meters / #{corridorMeters})))::integer AS contribution
             FROM distances
+            WHERE distance_to_route_meters <= #{corridorMeters}
             ORDER BY contribution DESC, distance_to_route_meters
             LIMIT 100
             """)

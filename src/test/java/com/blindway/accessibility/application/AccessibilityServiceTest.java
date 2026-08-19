@@ -21,6 +21,8 @@ import com.blindway.accessibility.infrastructure.IssueRow;
 import com.blindway.accessibility.infrastructure.RouteRiskRow;
 import com.blindway.accessibility.infrastructure.VerificationCounts;
 import com.blindway.common.api.ApiException;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -49,7 +51,7 @@ class AccessibilityServiceTest {
                         any(Instant.class)))
                 .thenReturn(Optional.of(existing));
         when(mapper.findById(issueId)).thenReturn(Optional.of(existing));
-        AccessibilityService service = new AccessibilityService(mapper);
+        AccessibilityService service = service();
 
         service.create(
                 userId, new CreateIssueRequest(IssueType.TACTILE_PAVING_DAMAGED, "同一处盲道破损", 4, 116.397128, 39.916527));
@@ -77,7 +79,7 @@ class AccessibilityServiceTest {
                 .thenReturn(List.of(
                         new RouteRiskRow(UUID.randomUUID(), IssueType.CONSTRUCTION, 5, 80, 3.5, 32),
                         new RouteRiskRow(UUID.randomUUID(), IssueType.TACTILE_PAVING_DAMAGED, 3, 60, 12.0, 11)));
-        AccessibilityService service = new AccessibilityService(mapper);
+        AccessibilityService service = service();
 
         var result = service.assessRoute(new RouteRiskRequest(
                 List.of(new RouteRiskRequest.Point(116.39, 39.91), new RouteRiskRequest.Point(116.4, 39.92)), null));
@@ -91,7 +93,7 @@ class AccessibilityServiceTest {
     @Test
     void keepsExplicitRouteCorridor() {
         when(mapper.findRouteRisks("LINESTRING(116.39 39.91,116.4 39.92)", 30)).thenReturn(List.of());
-        AccessibilityService service = new AccessibilityService(mapper);
+        AccessibilityService service = service();
 
         var result = service.assessRoute(new RouteRiskRequest(
                 List.of(new RouteRiskRequest.Point(116.39, 39.91), new RouteRiskRequest.Point(116.4, 39.92)), 30));
@@ -110,7 +112,7 @@ class AccessibilityServiceTest {
         when(mapper.transitionStatus(
                         eq(issueId), eq("VERIFIED"), eq("PROCESSING"), eq(0), eq(adminId), any(Instant.class)))
                 .thenReturn(1);
-        AccessibilityService service = new AccessibilityService(mapper);
+        AccessibilityService service = service();
 
         service.transition(adminId, issueId, new TransitionIssueRequest(IssueStatus.PROCESSING, "治理人员已受理", 0));
 
@@ -123,7 +125,7 @@ class AccessibilityServiceTest {
     void rejectsIllegalWorkflowTransition() {
         UUID issueId = UUID.randomUUID();
         when(mapper.findById(issueId)).thenReturn(Optional.of(issue(issueId, "PENDING")));
-        AccessibilityService service = new AccessibilityService(mapper);
+        AccessibilityService service = service();
 
         assertThatThrownBy(() -> service.transition(
                         UUID.randomUUID(), issueId, new TransitionIssueRequest(IssueStatus.RESOLVED, "尝试跳过核验", 0)))
@@ -137,7 +139,7 @@ class AccessibilityServiceTest {
         UUID userId = UUID.randomUUID();
         when(mapper.findById(issueId)).thenReturn(Optional.of(issue(issueId, "PENDING")));
         when(mapper.countVerifications(issueId)).thenReturn(new VerificationCounts(2, 0));
-        AccessibilityService service = new AccessibilityService(mapper);
+        AccessibilityService service = service();
 
         service.verify(userId, issueId, new VerificationRequest(VerificationRequest.Decision.CONFIRM, "现场仍然存在"));
 
@@ -158,7 +160,7 @@ class AccessibilityServiceTest {
         UUID issueId = UUID.randomUUID();
         when(mapper.findById(issueId)).thenReturn(Optional.of(issue(issueId, "PENDING")));
         when(mapper.countVerifications(issueId)).thenReturn(new VerificationCounts(1, 0));
-        AccessibilityService service = new AccessibilityService(mapper);
+        AccessibilityService service = service();
 
         service.verify(UUID.randomUUID(), issueId, new VerificationRequest(VerificationRequest.Decision.CONFIRM, null));
 
@@ -169,7 +171,7 @@ class AccessibilityServiceTest {
     void rejectsVerificationForResolvedIssue() {
         UUID issueId = UUID.randomUUID();
         when(mapper.findById(issueId)).thenReturn(Optional.of(issue(issueId, "RESOLVED")));
-        AccessibilityService service = new AccessibilityService(mapper);
+        AccessibilityService service = service();
 
         assertThatThrownBy(() -> service.verify(
                         UUID.randomUUID(),
@@ -186,7 +188,7 @@ class AccessibilityServiceTest {
         UUID mediaId = UUID.randomUUID();
         when(mapper.findById(issueId)).thenReturn(Optional.of(issue(issueId, "PENDING")));
         when(mapper.countOwnedMedia(mediaId, userId)).thenReturn(0);
-        AccessibilityService service = new AccessibilityService(mapper);
+        AccessibilityService service = service();
 
         assertThatThrownBy(() -> service.attachEvidence(userId, issueId, mediaId))
                 .isInstanceOf(ApiException.class)
@@ -215,5 +217,16 @@ class AccessibilityServiceTest {
                 Instant.parse("2026-08-04T08:30:00Z"),
                 Instant.parse("2026-08-04T08:30:00Z"),
                 Instant.parse("2026-08-04T08:30:00Z"));
+    }
+
+    private AccessibilityService service() {
+        return new AccessibilityService(
+                mapper,
+                new SpatialQueryGuard(
+                        new SimpleMeterRegistry(),
+                        5,
+                        Duration.ofMillis(50),
+                        Duration.ofSeconds(1),
+                        Duration.ofMillis(1500)));
     }
 }

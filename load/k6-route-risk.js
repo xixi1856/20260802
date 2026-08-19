@@ -7,9 +7,13 @@ const rate = Number(__ENV.RATE || 10);
 const duration = __ENV.DURATION || '30s';
 const corridorMeters = Number(__ENV.CORRIDOR_METERS || 20);
 const pointCount = Number(__ENV.POINT_COUNT || 20);
+const routeVariants = Number(__ENV.ROUTE_VARIANTS || 1009);
 
 if (pointCount < 2 || pointCount > 500) {
   throw new Error('POINT_COUNT must be between 2 and 500');
+}
+if (routeVariants < 1) {
+  throw new Error('ROUTE_VARIANTS must be positive');
 }
 
 export const options = {
@@ -37,7 +41,8 @@ export function setup() {
 }
 
 export function assessRoute(data) {
-  const shift = ((exec.scenario.iterationInTest % 11) - 5) * 0.00002;
+  const variant = exec.scenario.iterationInTest % routeVariants;
+  const shift = routeVariants === 1 ? 0 : (variant / (routeVariants - 1) - 0.5) * 0.001;
   const points = [];
   for (let index = 0; index < pointCount; index += 1) {
     const progress = index / (pointCount - 1);

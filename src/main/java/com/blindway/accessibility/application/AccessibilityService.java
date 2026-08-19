@@ -31,13 +31,17 @@ public class AccessibilityService {
     private static final int DEFAULT_ROUTE_CORRIDOR_METERS = 20;
 
     private final AccessibilityMapper mapper;
+    private final SpatialQueryGuard spatialQueryGuard;
 
-    public AccessibilityService(AccessibilityMapper mapper) {
+    public AccessibilityService(AccessibilityMapper mapper, SpatialQueryGuard spatialQueryGuard) {
         this.mapper = mapper;
+        this.spatialQueryGuard = spatialQueryGuard;
     }
 
     @Transactional
-    @CacheEvict(cacheNames = CacheConfig.NEARBY_ISSUES, allEntries = true)
+    @CacheEvict(
+            cacheNames = {CacheConfig.NEARBY_ISSUES, CacheConfig.ROUTE_RISKS},
+            allEntries = true)
     public IssueResponse create(UUID userId, CreateIssueRequest request) {
         Instant now = Instant.now();
         aggregationLockKeys(request).forEach(mapper::lockAggregationBucket);
@@ -77,9 +81,12 @@ public class AccessibilityService {
             key = "{#longitude, #latitude, #radiusMeters, #limit}",
             sync = true)
     public List<IssueResponse> nearby(double longitude, double latitude, int radiusMeters, int limit) {
-        return mapper.nearby(longitude, latitude, radiusMeters, limit).stream()
-                .map(this::response)
-                .toList();
+        return spatialQueryGuard.execute("nearby", () -> {
+            mapper.setLocalStatementTimeout(spatialQueryGuard.statementTimeout("nearby"));
+            return mapper.nearby(longitude, latitude, radiusMeters, limit).stream()
+                    .map(this::response)
+                    .toList();
+        });
     }
 
     @Transactional(readOnly = true)
@@ -88,7 +95,9 @@ public class AccessibilityService {
     }
 
     @Transactional
-    @CacheEvict(cacheNames = CacheConfig.NEARBY_ISSUES, allEntries = true)
+    @CacheEvict(
+            cacheNames = {CacheConfig.NEARBY_ISSUES, CacheConfig.ROUTE_RISKS},
+            allEntries = true)
     public void verify(UUID userId, UUID issueId, VerificationRequest request) {
         IssueRow issue = requireIssue(issueId);
         if ("RESOLVED".equals(issue.status())) {
@@ -118,6 +127,7 @@ public class AccessibilityService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(cacheNames = CacheConfig.ROUTE_RISKS, key = "#request", sync = true)
     public RouteRiskResponse assessRoute(RouteRiskRequest request) {
         int corridorMeters =
                 request.corridorMeters() == null ? DEFAULT_ROUTE_CORRIDOR_METERS : request.corridorMeters();
@@ -126,20 +136,23 @@ public class AccessibilityService {
                         .map(point -> point.longitude() + " " + point.latitude())
                         .collect(java.util.stream.Collectors.joining(","))
                 + ")";
-        var rows = mapper.findRouteRisks(lineString, corridorMeters);
-        int score =
-                Math.min(100, rows.stream().mapToInt(row -> row.contribution()).sum());
-        String level = score >= 70 ? "HIGH" : score >= 35 ? "MEDIUM" : "LOW";
-        var issues = rows.stream()
-                .map(row -> new RouteRiskResponse.RiskIssue(
-                        row.issueId(),
-                        row.type().name(),
-                        row.severity(),
-                        row.confidenceScore(),
-                        row.distanceToRouteMeters(),
-                        row.contribution()))
-                .toList();
-        return new RouteRiskResponse(score, level, rows.size(), corridorMeters, issues);
+        return spatialQueryGuard.execute("route", () -> {
+            mapper.setLocalStatementTimeout(spatialQueryGuard.statementTimeout("route"));
+            var rows = mapper.findRouteRisks(lineString, corridorMeters);
+            int score = Math.min(
+                    100, rows.stream().mapToInt(row -> row.contribution()).sum());
+            String level = score >= 70 ? "HIGH" : score >= 35 ? "MEDIUM" : "LOW";
+            var issues = rows.stream()
+                    .map(row -> new RouteRiskResponse.RiskIssue(
+                            row.issueId(),
+                            row.type().name(),
+                            row.severity(),
+                            row.confidenceScore(),
+                            row.distanceToRouteMeters(),
+                            row.contribution()))
+                    .toList();
+            return new RouteRiskResponse(score, level, rows.size(), corridorMeters, issues);
+        });
     }
 
     @Transactional(readOnly = true)
@@ -160,7 +173,9 @@ public class AccessibilityService {
     }
 
     @Transactional
-    @CacheEvict(cacheNames = CacheConfig.NEARBY_ISSUES, allEntries = true)
+    @CacheEvict(
+            cacheNames = {CacheConfig.NEARBY_ISSUES, CacheConfig.ROUTE_RISKS},
+            allEntries = true)
     public IssueResponse transition(UUID actorUserId, UUID issueId, TransitionIssueRequest request) {
         IssueRow issue = requireIssue(issueId);
         IssueStatus current = IssueStatus.valueOf(issue.status());

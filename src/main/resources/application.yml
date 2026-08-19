@@ -8,6 +8,8 @@ spring:
     hikari:
       maximum-pool-size: 10
       minimum-idle: 2
+      connection-timeout: 1000
+      validation-timeout: 1000
       connection-init-sql: SET jit = off
   data:
     redis:
@@ -54,9 +56,14 @@ logging:
       console: logstash
 
 blindway:
+  spatial:
+    max-concurrent: ${SPATIAL_MAX_CONCURRENT:5}
+    acquire-timeout: ${SPATIAL_ACQUIRE_TIMEOUT:50ms}
+    nearby-statement-timeout: ${NEARBY_STATEMENT_TIMEOUT:1s}
+    route-statement-timeout: ${ROUTE_STATEMENT_TIMEOUT:1500ms}
   security:
     jwt-secret: ${JWT_SECRET:local-development-secret-change-me-32-bytes}
-    access-token-ttl: PT15M
+    access-token-ttl: ${JWT_ACCESS_TOKEN_TTL:PT15M}
     refresh-token-ttl: P7D
   mqtt:
     enabled: ${MQTT_ENABLED:false}

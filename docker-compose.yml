@@ -19,6 +19,8 @@ services:
       MQTT_BACKEND_USERNAME: ${MQTT_BACKEND_USERNAME:-blindway-backend}
       MQTT_BACKEND_PASSWORD: ${MQTT_BACKEND_PASSWORD:-blindway-backend}
       JWT_SECRET: ${JWT_SECRET:-local-development-secret-change-me-32-bytes}
+      JWT_ACCESS_TOKEN_TTL: ${JWT_ACCESS_TOKEN_TTL:-PT15M}
+      SPATIAL_MAX_CONCURRENT: ${SPATIAL_MAX_CONCURRENT:-5}
       AMAP_WEB_KEY: ${AMAP_WEB_KEY:-}
     ports:
       - "8080:8080"

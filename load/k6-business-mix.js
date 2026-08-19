@@ -76,11 +76,13 @@ export function nearbyIssues(data) {
 }
 
 export function routeRisk(data) {
+  const iteration = exec.scenario.iterationInTest;
+  const shift = centeredSequence(iteration, 3571) * 0.001;
   const points = [];
   for (let index = 0; index < 20; index += 1) {
     points.push({
-      longitude: 116.392 + index * 0.00055,
-      latitude: 39.912 + index * 0.00045,
+      longitude: 116.392 + index * 0.00055 + shift,
+      latitude: 39.912 + index * 0.00045 - shift,
     });
   }
   const response = http.post(

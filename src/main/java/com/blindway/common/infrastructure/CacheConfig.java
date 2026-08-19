@@ -13,14 +13,25 @@ import org.springframework.context.annotation.Configuration;
 public class CacheConfig {
 
     public static final String NEARBY_ISSUES = "nearbyIssues";
+    public static final String ROUTE_RISKS = "routeRisks";
 
     @Bean
     CacheManager cacheManager() {
-        CaffeineCacheManager manager = new CaffeineCacheManager(NEARBY_ISSUES);
-        manager.setCaffeine(Caffeine.newBuilder()
-                .maximumSize(2_000)
-                .expireAfterWrite(Duration.ofSeconds(3))
-                .recordStats());
+        CaffeineCacheManager manager = new CaffeineCacheManager();
+        manager.registerCustomCache(
+                NEARBY_ISSUES,
+                Caffeine.newBuilder()
+                        .maximumSize(2_000)
+                        .expireAfterWrite(Duration.ofSeconds(3))
+                        .recordStats()
+                        .build());
+        manager.registerCustomCache(
+                ROUTE_RISKS,
+                Caffeine.newBuilder()
+                        .maximumSize(1_000)
+                        .expireAfterWrite(Duration.ofSeconds(5))
+                        .recordStats()
+                        .build());
         return manager;
     }
 }
