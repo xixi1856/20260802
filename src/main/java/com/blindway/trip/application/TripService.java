@@ -43,23 +43,14 @@ public class TripService implements TripLocationAccess {
     @Transactional
     public int appendTrackPoints(UUID userId, UUID tripId, List<TrackPointInput> points) {
         TripRow trip = ownedActiveTrip(userId, tripId);
-        int inserted = 0;
         Instant now = Instant.now();
         for (TrackPointInput point : points) {
             if (point.recordedAt().isBefore(trip.startedAt().minusSeconds(5))
                     || point.recordedAt().isAfter(now.plusSeconds(30))) {
                 throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_TRACK_TIME", "轨迹时间超出允许范围");
             }
-            inserted += mapper.insertTrackPoint(
-                    tripId,
-                    point.recordedAt(),
-                    point.longitude(),
-                    point.latitude(),
-                    point.accuracyMeters(),
-                    point.speedMetersPerSecond(),
-                    now);
         }
-        return inserted;
+        return mapper.insertTrackPoints(tripId, points, now);
     }
 
     @Transactional

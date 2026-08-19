@@ -10,11 +10,40 @@ export const users = new SharedArray('load-test users', () => {
 
 let accessToken;
 
-export function currentUser() {
-  return users[(__VU - 1) % users.length];
+export function currentUser(index = (__VU - 1) % users.length) {
+  return users[index % users.length];
 }
 
-export function authParams(endpoint) {
+export function loginAllUsers() {
+  const accessTokens = [];
+  for (const user of users) {
+    const response = http.post(
+      `${BASE_URL}/auth/login`,
+      JSON.stringify({ email: user.email, password: user.password }),
+      {
+        headers: { 'Content-Type': 'application/json' },
+        tags: { endpoint: 'setup-login' },
+      },
+    );
+    if (response.status !== 200 || !response.json('accessToken')) {
+      fail(`Setup login failed for ${user.email} with HTTP ${response.status}`);
+    }
+    accessTokens.push(response.json('accessToken'));
+  }
+  return { accessTokens };
+}
+
+export function authParams(endpoint, setupData, userIndex = (__VU - 1) % users.length) {
+  if (setupData?.accessTokens) {
+    return {
+      headers: {
+        Authorization: `Bearer ${setupData.accessTokens[userIndex % setupData.accessTokens.length]}`,
+        'Content-Type': 'application/json',
+      },
+      tags: { endpoint },
+    };
+  }
+
   if (!accessToken) {
     const user = currentUser();
     const response = http.post(

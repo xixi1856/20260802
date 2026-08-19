@@ -1,6 +1,6 @@
 import http from 'k6/http';
 import { check } from 'k6';
-import { authParams, BASE_URL } from './lib/common.js';
+import { authParams, BASE_URL, loginAllUsers } from './lib/common.js';
 
 const maxRate = Number(__ENV.MAX_RATE || 100);
 
@@ -29,12 +29,16 @@ export const options = {
   },
 };
 
-export function nearby() {
+export function setup() {
+  return loginAllUsers();
+}
+
+export function nearby(data) {
   const longitude = 116.397128 + (Math.random() - 0.5) * 0.01;
   const latitude = 39.916527 + (Math.random() - 0.5) * 0.01;
   const response = http.get(
     `${BASE_URL}/accessibility-issues?longitude=${longitude}&latitude=${latitude}&radiusMeters=500&limit=20`,
-    authParams('nearby-issues'),
+    authParams('nearby-issues', data),
   );
   check(response, { 'nearby returned 200': (value) => value.status === 200 });
 }

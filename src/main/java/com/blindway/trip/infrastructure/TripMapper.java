@@ -1,6 +1,8 @@
 package com.blindway.trip.infrastructure;
 
+import com.blindway.trip.api.TrackPointInput;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.apache.ibatis.annotations.Insert;
@@ -50,21 +52,21 @@ public interface TripMapper {
 
     @Insert(
             """
+            <script>
             INSERT INTO trip_track_point
                 (trip_id, recorded_at, location, accuracy_meters, speed_meters_per_second, created_at)
             VALUES
-                (#{tripId}, #{recordedAt},
-                 ST_SetSRID(ST_MakePoint(#{longitude}, #{latitude}), 4326)::geography,
-                 #{accuracyMeters}, #{speedMetersPerSecond}, #{createdAt})
+            <foreach collection="points" item="point" separator=",">
+                (#{tripId}, #{point.recordedAt},
+                 ST_SetSRID(ST_MakePoint(#{point.longitude}, #{point.latitude}), 4326)::geography,
+                 #{point.accuracyMeters}, #{point.speedMetersPerSecond}, #{createdAt})
+            </foreach>
             ON CONFLICT (trip_id, recorded_at) DO NOTHING
+            </script>
             """)
-    int insertTrackPoint(
+    int insertTrackPoints(
             @Param("tripId") UUID tripId,
-            @Param("recordedAt") Instant recordedAt,
-            @Param("longitude") double longitude,
-            @Param("latitude") double latitude,
-            @Param("accuracyMeters") double accuracyMeters,
-            @Param("speedMetersPerSecond") Double speedMetersPerSecond,
+            @Param("points") List<TrackPointInput> points,
             @Param("createdAt") Instant createdAt);
 
     @Update(

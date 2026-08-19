@@ -12,10 +12,13 @@ import com.blindway.accessibility.infrastructure.AccessibilityMapper;
 import com.blindway.accessibility.infrastructure.IssueRow;
 import com.blindway.accessibility.infrastructure.VerificationCounts;
 import com.blindway.common.api.ApiException;
+import com.blindway.common.infrastructure.CacheConfig;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +36,7 @@ public class AccessibilityService {
     }
 
     @Transactional
+    @CacheEvict(cacheNames = CacheConfig.NEARBY_ISSUES, allEntries = true)
     public IssueResponse create(UUID userId, CreateIssueRequest request) {
         Instant now = Instant.now();
         aggregationLockKeys(request).forEach(mapper::lockAggregationBucket);
@@ -67,6 +71,10 @@ public class AccessibilityService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(
+            cacheNames = CacheConfig.NEARBY_ISSUES,
+            key = "{#longitude, #latitude, #radiusMeters, #limit}",
+            sync = true)
     public List<IssueResponse> nearby(double longitude, double latitude, int radiusMeters, int limit) {
         return mapper.nearby(longitude, latitude, radiusMeters, limit).stream()
                 .map(this::response)
@@ -79,6 +87,7 @@ public class AccessibilityService {
     }
 
     @Transactional
+    @CacheEvict(cacheNames = CacheConfig.NEARBY_ISSUES, allEntries = true)
     public void verify(UUID userId, UUID issueId, VerificationRequest request) {
         IssueRow issue = requireIssue(issueId);
         if ("RESOLVED".equals(issue.status())) {
@@ -149,6 +158,7 @@ public class AccessibilityService {
     }
 
     @Transactional
+    @CacheEvict(cacheNames = CacheConfig.NEARBY_ISSUES, allEntries = true)
     public IssueResponse transition(UUID actorUserId, UUID issueId, TransitionIssueRequest request) {
         IssueRow issue = requireIssue(issueId);
         IssueStatus current = IssueStatus.valueOf(issue.status());

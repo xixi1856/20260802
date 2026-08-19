@@ -14,13 +14,14 @@ Invoke-RestMethod http://127.0.0.1:8080/actuator/health
 
 ## 2. HTTP 压测
 
-需要安装 k6。每个脚本会让虚拟用户登录并复用 JWT。
+需要安装 k6。arrival-rate 脚本会在 `setup` 阶段顺序登录全部虚拟用户，业务阶段只复用 JWT，避免 BCrypt 登录突发干扰业务接口指标。
 
 ```powershell
 k6 run --summary-export load\results\smoke.json load\k6-smoke.js
 k6 run --summary-export load\results\nearby-100rps.json load\k6-nearby.js
 k6 run --summary-export load\results\issue-concurrency-20rps.json load\k6-issue-concurrency.js
 k6 run --summary-export load\results\track-20rps-batch20.json load\k6-track-points.js
+k6 run --summary-export load\results\nearby-hot-cache-200rps.json load\k6-nearby-hot-cache.js
 
 $env:DURATION='60s'
 $env:NEARBY_RATE='10'
@@ -49,7 +50,8 @@ mvn --% -q -f tools\pi-simulator\pom.xml -Dexec.mainClass=com.blindway.tools.Mqt
 
 - 先看错误率、业务校验和数据库最终行数，再看延迟；快速失败的 4xx/5xx 不是好性能。
 - arrival-rate 场景中的 `dropped_iterations` 表示服务已跟不上目标到达率。
-- 登录请求只发生在每个 VU 首次运行时；端点标签的延迟不包含登录耗时。
+- 登录请求只发生在 `setup` 阶段；端点标签的延迟不包含登录耗时。全局 `http_req_duration` 仍包含 setup 登录，接口对比应查看对应的 `endpoint:*` 标签。
 - 本机同时运行 k6 和全部容器，结果只用于发现瓶颈和回归对比，不代表生产容量。
 
 本次基线见 `docs/performance/initial-load-test-2026-08-17.md`。
+优化复测见 `docs/performance/optimized-load-test-2026-08-19.md`。

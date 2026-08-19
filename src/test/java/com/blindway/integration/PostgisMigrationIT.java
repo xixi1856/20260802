@@ -8,12 +8,14 @@ import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.utility.DockerImageName;
 
 @Testcontainers(disabledWithoutDocker = true)
 class PostgisMigrationIT {
 
     @Container
-    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgis/postgis:18-3.6")
+    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>(
+                    DockerImageName.parse("postgis/postgis:18-3.6").asCompatibleSubstituteFor("postgres"))
             .withDatabaseName("blindway")
             .withUsername("blindway")
             .withPassword("blindway");

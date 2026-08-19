@@ -1,6 +1,6 @@
 import http from 'k6/http';
 import { check } from 'k6';
-import { authParams, BASE_URL } from './lib/common.js';
+import { authParams, BASE_URL, loginAllUsers } from './lib/common.js';
 
 const rate = Number(__ENV.RATE || 20);
 const duration = __ENV.DURATION || '30s';
@@ -25,7 +25,11 @@ export const options = {
   },
 };
 
-export function createIssue() {
+export function setup() {
+  return loginAllUsers();
+}
+
+export function createIssue(data) {
   const response = http.post(
     `${BASE_URL}/accessibility-issues`,
     JSON.stringify({
@@ -35,7 +39,7 @@ export function createIssue() {
       longitude: 121.473701,
       latitude: 31.230416,
     }),
-    authParams('create-issue'),
+    authParams('create-issue', data),
   );
   check(response, { 'issue create returned 201': (value) => value.status === 201 });
 }

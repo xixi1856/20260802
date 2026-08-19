@@ -10,8 +10,7 @@ class TraceIdFilterConfig {
 
     @Bean
     FilterRegistrationBean<TraceIdFilter> traceIdFilterRegistration() {
-        FilterRegistrationBean<TraceIdFilter> registration =
-                new FilterRegistrationBean<>(new TraceIdFilter());
+        FilterRegistrationBean<TraceIdFilter> registration = new FilterRegistrationBean<>(new TraceIdFilter());
         registration.setOrder(Ordered.HIGHEST_PRECEDENCE);
         return registration;
     }

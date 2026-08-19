@@ -1,7 +1,7 @@
 import http from 'k6/http';
 import { check } from 'k6';
 import exec from 'k6/execution';
-import { authParams, BASE_URL, currentUser } from './lib/common.js';
+import { authParams, BASE_URL, currentUser, loginAllUsers, users } from './lib/common.js';
 
 const rate = Number(__ENV.RATE || 20);
 const duration = __ENV.DURATION || '60s';
@@ -27,9 +27,14 @@ export const options = {
   },
 };
 
-export function appendTrackPoints() {
-  const user = currentUser();
+export function setup() {
+  return loginAllUsers();
+}
+
+export function appendTrackPoints(data) {
   const iteration = exec.scenario.iterationInTest;
+  const userIndex = iteration % users.length;
+  const user = currentUser(userIndex);
   const points = [];
   const requestTime = Date.now();
 
@@ -50,7 +55,7 @@ export function appendTrackPoints() {
   const response = http.post(
     `${BASE_URL}/trips/${user.tripId}/track-points`,
     JSON.stringify({ points }),
-    authParams('track-points'),
+    authParams('track-points', data, userIndex),
   );
   check(response, {
     'track append returned 202': (value) => value.status === 202,

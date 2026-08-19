@@ -118,13 +118,14 @@ public interface AccessibilityMapper {
                    ST_X(location::geometry) AS longitude,
                    ST_Y(location::geometry) AS latitude,
                    ST_Distance(location,
-                       ST_SetSRID(ST_MakePoint(#{longitude}, #{latitude}), 4326)::geography) AS distance_meters,
+                       ST_SetSRID(ST_MakePoint(#{longitude}, #{latitude}), 4326)::geography,
+                       false) AS distance_meters,
                    last_reported_at, created_at, updated_at
             FROM accessibility_issue
             WHERE status IN ('PENDING', 'VERIFIED', 'PROCESSING')
               AND ST_DWithin(location,
                   ST_SetSRID(ST_MakePoint(#{longitude}, #{latitude}), 4326)::geography,
-                  #{radiusMeters})
+                  #{radiusMeters}, false)
             ORDER BY risk_score DESC, distance_meters, last_reported_at DESC
             LIMIT #{limit}
             """)

@@ -1,7 +1,7 @@
 import http from 'k6/http';
 import { check } from 'k6';
 import exec from 'k6/execution';
-import { authParams, BASE_URL, currentUser } from './lib/common.js';
+import { authParams, BASE_URL, currentUser, loginAllUsers } from './lib/common.js';
 
 const duration = __ENV.DURATION || '90s';
 
@@ -55,17 +55,21 @@ export const options = {
   },
 };
 
-export function nearbyIssues() {
+export function setup() {
+  return loginAllUsers();
+}
+
+export function nearbyIssues(data) {
   const longitude = 116.397128 + (Math.random() - 0.5) * 0.01;
   const latitude = 39.916527 + (Math.random() - 0.5) * 0.01;
   const response = http.get(
     `${BASE_URL}/accessibility-issues?longitude=${longitude}&latitude=${latitude}&radiusMeters=500&limit=20`,
-    authParams('nearby-issues'),
+    authParams('nearby-issues', data),
   );
   check(response, { 'nearby returned 200': (value) => value.status === 200 });
 }
 
-export function routeRisk() {
+export function routeRisk(data) {
   const points = [];
   for (let index = 0; index < 20; index += 1) {
     points.push({
@@ -76,12 +80,12 @@ export function routeRisk() {
   const response = http.post(
     `${BASE_URL}/accessibility-issues/route-risk-assessments`,
     JSON.stringify({ points, corridorMeters: 30 }),
-    authParams('route-risk'),
+    authParams('route-risk', data),
   );
   check(response, { 'route risk returned 200': (value) => value.status === 200 });
 }
 
-export function trackPoints() {
+export function trackPoints(data) {
   const user = currentUser();
   const iteration = exec.scenario.iterationInTest;
   const points = [];
@@ -98,12 +102,12 @@ export function trackPoints() {
   const response = http.post(
     `${BASE_URL}/trips/${user.tripId}/track-points`,
     JSON.stringify({ points }),
-    authParams('track-points'),
+    authParams('track-points', data),
   );
   check(response, { 'mixed track append returned 202': (value) => value.status === 202 });
 }
 
-export function createIssue() {
+export function createIssue(data) {
   const response = http.post(
     `${BASE_URL}/accessibility-issues`,
     JSON.stringify({
@@ -113,7 +117,7 @@ export function createIssue() {
       longitude: 116.397128 + (Math.random() - 0.5) * 0.02,
       latitude: 39.916527 + (Math.random() - 0.5) * 0.02,
     }),
-    authParams('create-issue'),
+    authParams('create-issue', data),
   );
   check(response, { 'mixed issue create returned 201': (value) => value.status === 201 });
 }
