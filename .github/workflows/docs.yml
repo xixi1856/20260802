@@ -12,6 +12,7 @@ permissions:
 
 jobs:
   pages:
+    if: github.event.repository.has_pages == true
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
