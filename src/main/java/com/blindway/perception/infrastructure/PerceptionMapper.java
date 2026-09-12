@@ -6,11 +6,13 @@ import com.blindway.perception.domain.ObstacleEventPayload;
 import com.blindway.perception.domain.PathEventPayload;
 import com.blindway.trip.TripLocationAccess.LocationMatch;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
 @Mapper
@@ -25,7 +27,7 @@ public interface PerceptionMapper {
                 (#{envelope.eventId}, #{envelope.deviceId}, #{envelope.tripId}, #{topic},
                  #{envelope.schemaVersion}, #{envelope.bootId}, #{envelope.sequenceNo},
                  #{envelope.occurredAt}, #{envelope.sentAt}, #{receivedAt},
-                 CAST(#{rawPayload} AS jsonb), 'RECEIVED')
+                 CAST(#{rawPayload} AS jsonb), 'PENDING')
             ON CONFLICT (event_id) DO NOTHING
             """)
     int insertInbox(
@@ -34,19 +36,93 @@ public interface PerceptionMapper {
             @Param("receivedAt") Instant receivedAt,
             @Param("rawPayload") String rawPayload);
 
+    @Select(
+            """
+            WITH candidates AS (
+                SELECT event_id
+                FROM mqtt_inbox
+                WHERE (process_status = 'PENDING' AND next_attempt_at <= #{now})
+                   OR (process_status = 'PROCESSING' AND lease_until < #{now})
+                ORDER BY next_attempt_at, received_at
+                FOR UPDATE SKIP LOCKED
+                LIMIT #{limit}
+            )
+            UPDATE mqtt_inbox inbox
+            SET process_status = 'PROCESSING', lease_owner = #{owner}, lease_until = #{leaseUntil},
+                attempt_count = inbox.attempt_count + 1
+            FROM candidates
+            WHERE inbox.event_id = candidates.event_id
+            RETURNING inbox.event_id, inbox.topic, inbox.raw_payload::text AS raw_payload,
+                      inbox.received_at, inbox.attempt_count
+            """)
+    List<MqttInboxRow> claimInboxBatch(
+            @Param("owner") String owner,
+            @Param("now") Instant now,
+            @Param("leaseUntil") Instant leaseUntil,
+            @Param("limit") int limit);
+
     @Update(
             """
             UPDATE mqtt_inbox
-            SET process_status = #{status}, error_code = #{errorCode}, processed_at = #{processedAt},
-                trip_id = COALESCE(#{tripId}, trip_id)
-            WHERE event_id = #{eventId}
+            SET process_status = 'PROCESSED', error_code = NULL, last_error = NULL,
+                processed_at = #{processedAt}, trip_id = COALESCE(#{tripId}, trip_id),
+                lease_owner = NULL, lease_until = NULL
+            WHERE event_id = #{eventId} AND process_status = 'PROCESSING' AND lease_owner = #{owner}
             """)
-    void updateInbox(
+    int markProcessed(
             @Param("eventId") UUID eventId,
-            @Param("status") String status,
+            @Param("owner") String owner,
+            @Param("processedAt") Instant processedAt,
+            @Param("tripId") UUID tripId);
+
+    @Update(
+            """
+            UPDATE mqtt_inbox
+            SET process_status = 'REJECTED', error_code = #{errorCode}, last_error = NULL,
+                processed_at = #{processedAt}, lease_owner = NULL, lease_until = NULL
+            WHERE event_id = #{eventId} AND process_status = 'PROCESSING' AND lease_owner = #{owner}
+            """)
+    int markRejected(
+            @Param("eventId") UUID eventId,
+            @Param("owner") String owner,
             @Param("errorCode") String errorCode,
-            @Param("tripId") UUID tripId,
             @Param("processedAt") Instant processedAt);
+
+    @Update(
+            """
+            UPDATE mqtt_inbox
+            SET process_status = #{status}, last_error = left(#{error}, 500),
+                next_attempt_at = #{nextAttemptAt}, processed_at = CASE WHEN #{status} = 'DEAD' THEN now() ELSE NULL END,
+                lease_owner = NULL, lease_until = NULL
+            WHERE event_id = #{eventId} AND process_status = 'PROCESSING' AND lease_owner = #{owner}
+            """)
+    int markInboxFailed(
+            @Param("eventId") UUID eventId,
+            @Param("owner") String owner,
+            @Param("status") String status,
+            @Param("error") String error,
+            @Param("nextAttemptAt") Instant nextAttemptAt);
+
+    @Update(
+            """
+            UPDATE mqtt_inbox
+            SET process_status = 'PENDING', attempt_count = 0, next_attempt_at = #{replayedAt},
+                lease_owner = NULL, lease_until = NULL, error_code = NULL, last_error = NULL,
+                processed_at = NULL
+            WHERE event_id = #{eventId} AND process_status IN ('DEAD', 'REJECTED')
+            """)
+    int replayInbox(@Param("eventId") UUID eventId, @Param("replayedAt") Instant replayedAt);
+
+    @Select("SELECT count(*) FROM mqtt_inbox WHERE process_status = #{status}")
+    long countInboxByStatus(String status);
+
+    @Select(
+            """
+            SELECT COALESCE(EXTRACT(EPOCH FROM (#{now} - min(received_at))), 0)::bigint
+            FROM mqtt_inbox
+            WHERE process_status IN ('PENDING', 'PROCESSING')
+            """)
+    long oldestPendingAgeSeconds(Instant now);
 
     @Insert(
             """

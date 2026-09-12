@@ -1,13 +1,17 @@
 import http from 'k6/http';
 import { check } from 'k6';
 import exec from 'k6/execution';
+import { Counter } from 'k6/metrics';
 import { authParams, BASE_URL, loginAllUsers } from './lib/common.js';
 
-const rate = Number(__ENV.RATE || 10);
+const rate = Number(__ENV.RATE || 20);
 const duration = __ENV.DURATION || '30s';
 const corridorMeters = Number(__ENV.CORRIDOR_METERS || 20);
 const pointCount = Number(__ENV.POINT_COUNT || 20);
 const routeVariants = Number(__ENV.ROUTE_VARIANTS || 1009);
+const routeStatus200 = new Counter('route_status_200');
+const routeStatus429 = new Counter('route_status_429');
+const routeStatusOther = new Counter('route_status_other');
 
 if (pointCount < 2 || pointCount > 500) {
   throw new Error('POINT_COUNT must be between 2 and 500');
@@ -23,8 +27,8 @@ export const options = {
       rate,
       timeUnit: '1s',
       duration,
-      preAllocatedVUs: 20,
-      maxVUs: 100,
+      preAllocatedVUs: Math.max(20, rate * 2),
+      maxVUs: Math.max(100, rate * 4),
       exec: 'assessRoute',
     },
   },
@@ -57,5 +61,12 @@ export function assessRoute(data) {
     JSON.stringify({ points, corridorMeters }),
     authParams('route-risk', data),
   );
+  if (response.status === 200) {
+    routeStatus200.add(1);
+  } else if (response.status === 429) {
+    routeStatus429.add(1);
+  } else {
+    routeStatusOther.add(1);
+  }
   check(response, { 'route risk returned 200': (value) => value.status === 200 });
 }

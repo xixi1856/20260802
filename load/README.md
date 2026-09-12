@@ -7,10 +7,10 @@
 ```powershell
 docker compose up -d --build
 Invoke-RestMethod http://127.0.0.1:8080/actuator/health
-& .\load\prepare-load-data.ps1 -UserCount 50 -IssueCount 100000
+& .\load\prepare-load-data.ps1 -UserCount 50 -IssueCount 10000
 ```
 
-准备脚本会通过真实 API 创建用户、设备绑定和进行中行程，再用确定性 SQL 生成 10 万条障碍及报告。70% 数据集中在北京测试热点，用于暴露空间查询在高密度区域的性能边界。
+准备脚本默认先清理历史 `LOAD_SEED_*` 和 `load-user-*` 压测账号创建的问题，再通过真实 API 创建用户、设备绑定和进行中行程，最后用确定性 SQL 生成 1 万条合成障碍及报告。可显式传入 `-KeepExistingLoadIssues` 保留旧压测问题。70% 数据集中在北京测试热点，用于暴露空间查询在高密度区域的性能边界；这些记录是 `ADMIN_IMPORT` 压测种子，不代表真实用户或设备数据。
 
 ## 2. HTTP 压测
 
@@ -22,7 +22,11 @@ k6 run --summary-export load\results\nearby-100rps.json load\k6-nearby.js
 k6 run --summary-export load\results\issue-concurrency-20rps.json load\k6-issue-concurrency.js
 k6 run --summary-export load\results\track-20rps-batch20.json load\k6-track-points.js
 k6 run --summary-export load\results\nearby-hot-cache-200rps.json load\k6-nearby-hot-cache.js
-k6 run --summary-export load\results\route-risk-10rps.json load\k6-route-risk.js
+$env:DURATION='60s'
+foreach ($rate in 20, 25, 30) {
+  $env:RATE=[string]$rate
+  k6 run --summary-export "load\results\route-risk-10k-${rate}rps-60s.json" load\k6-route-risk.js
+}
 
 $env:DURATION='60s'
 $env:NEARBY_RATE='10'
@@ -32,7 +36,7 @@ $env:REPORT_RATE='2'
 k6 run --summary-export load\results\business-mix.json load\k6-business-mix.js
 ```
 
-可用环境变量：`BASE_URL`、`MAX_RATE`、`RATE`、`DURATION`、`BATCH_SIZE`、`CORRIDOR_METERS`、`POINT_COUNT`，以及混合场景中的四个 `*_RATE` 和 `ROUTE_CORRIDOR_METERS`。路线脚本的 `POINT_COUNT` 可在 2 到 500 之间调整，不同点数保持相同起终点，便于单独评估分段索引探测成本。
+可用环境变量：`BASE_URL`、`MAX_RATE`、`RATE`、`DURATION`、`BATCH_SIZE`、`CORRIDOR_METERS`、`POINT_COUNT`，以及混合场景中的四个 `*_RATE` 和 `ROUTE_CORRIDOR_METERS`。路线脚本默认 20 RPS，并按速率预分配两倍 VU；`POINT_COUNT` 可在 2 到 500 之间调整，不同点数保持相同起终点，便于单独评估分段索引探测成本。脚本还会分别统计 200、429 和其他响应，防止把主动降级误写成成功。
 
 ### 带资源采样的混合容量测试
 
@@ -56,10 +60,26 @@ k6 run --summary-export load\results\business-mix.json load\k6-business-mix.js
 $env:JAVA_HOME='C:\Program Files\Java\jdk-22'
 mvn -q -f tools\pi-simulator\pom.xml clean package
 
-mvn --% -q -f tools\pi-simulator\pom.xml -Dexec.mainClass=com.blindway.tools.MqttLoadSimulator exec:java -Dexec.args="tcp://127.0.0.1:1883 E:\javaprojects\20260802\load\data\devices.local.tsv 50 500"
+mvn --% -q -f tools\pi-simulator\pom.xml -Dexec.mainClass=com.blindway.tools.MqttLoadSimulator exec:java -Dexec.args="tcp://127.0.0.1:1883 E:\javaprojects\20260802\load\data\devices.local.tsv 100 500"
 ```
 
-最后两个参数是“每设备消息数”和“发送间隔毫秒”。例如 50 个设备、500 ms 间隔的目标速率约为 100 条/秒。
+最后两个参数是“每设备消息数”和“发送间隔毫秒”。例如 50 个设备、每设备 100 条、500 ms 间隔时共发布 5,000 条，目标速率约为 100 条/秒。
+
+### Kafka 扇出与故障验证
+
+```powershell
+$env:KAFKA_ENABLED='true'
+$env:MQTT_INGRESS_MODE='kafka'
+docker compose --profile kafka --profile app up -d --build --scale backend=2
+
+$startedAt = Get-Date
+# 运行上面的MqttLoadSimulator；50个设备各发布100条时，期望唯一事件数为5000。
+& .\load\verify-kafka-fanout.ps1 -ExpectedPublished 5000 -Since $startedAt
+```
+
+故障演练时在发布过程中执行`docker stop`终止任一Kafka节点和任一backend容器，再验证：Kafka主题ISR仍不少于2、Outbox最终全部
+`PUBLISHED`、三个consumer group各消费全部唯一事件、业务投影无重复。2026-09-01 的本地 Docker 实测结果、故障时间线和已知边界见
+`docs/performance/kafka-ha-acceptance-2026-09-01.md`。
 
 ## 4. 结果解释
 

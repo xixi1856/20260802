@@ -8,6 +8,7 @@ import com.blindway.device.api.EmqxAuthController;
 import com.blindway.identity.api.AuthController;
 import com.blindway.map.api.MapController;
 import com.blindway.media.api.MediaController;
+import com.blindway.perception.api.MqttInboxAdminController;
 import com.blindway.trip.api.TripController;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
@@ -37,6 +38,7 @@ class OpenApiControllerConsistencyTest {
             AccessibilityController.class,
             MediaController.class,
             MapController.class,
+            MqttInboxAdminController.class,
             EmqxAuthController.class);
 
     @Test

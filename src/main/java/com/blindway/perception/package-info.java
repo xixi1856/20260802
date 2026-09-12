@@ -1,2 +1,2 @@
-@org.springframework.modulith.ApplicationModule(allowedDependencies = {"device", "trip"})
+@org.springframework.modulith.ApplicationModule(allowedDependencies = {"common", "device", "trip"})
 package com.blindway.perception;

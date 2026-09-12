@@ -18,8 +18,13 @@ mvn spring-boot:run -Dspring-boot.run.profiles=local
 
 ```powershell
 mvn package
-docker compose --profile app up -d
+$env:KAFKA_ENABLED='true'
+$env:MQTT_INGRESS_MODE='kafka'
+docker compose --profile kafka --profile app up -d --build --scale backend=2
 ```
+
+该模式通过本地 Nginx 暴露 `8080`，运行两个后端实例和三个 Kafka KRaft 节点。只需要单实例且不启用事件扇出时，保持
+`KAFKA_ENABLED=false`、`MQTT_INGRESS_MODE=database` 并省略 `kafka` profile。
 
 健康检查：`GET http://localhost:8080/actuator/health`。
 
@@ -32,6 +37,7 @@ docker compose --profile app up -d
 - [架构决策](docs/adr/README.md)
 - [部署与恢复](ops/DEPLOYMENT.md)
 - [实现与验收状态](docs/IMPLEMENTATION_STATUS.md)
+- [Kafka 本地高可用验收](docs/performance/kafka-ha-acceptance-2026-09-01.md)
 - [Java 后端简历亮点](docs/RESUME_HIGHLIGHTS.md)
 - [业务进化实施计划](plan.md)
 
@@ -47,7 +53,8 @@ npm run docs:serve
 
 ## 模块
 
-`identity`、`device`、`trip`、`perception`、`accessibility`、`media`、`map`。模块边界由 Spring Modulith 与 ArchUnit 验证。
+`identity`、`device`、`trip`、`perception`、`accessibility`、`insight`、`media`、`map`。`insight` 包含社区候选、行程风险和
+设备分析三个独立 Kafka 消费投影；模块边界由 Spring Modulith 与 ArchUnit 验证。
 
 ## 本地限制
 

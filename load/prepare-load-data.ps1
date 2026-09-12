@@ -1,7 +1,8 @@
 param(
     [int]$UserCount = 50,
-    [int]$IssueCount = 100000,
-    [string]$BaseUrl = "http://127.0.0.1:8080/api/v1"
+    [int]$IssueCount = 10000,
+    [string]$BaseUrl = "http://127.0.0.1:8080/api/v1",
+    [switch]$KeepExistingLoadIssues
 )
 
 $ErrorActionPreference = "Stop"
@@ -38,6 +39,14 @@ function Invoke-JsonPost {
 $health = Invoke-RestMethod -Uri "http://127.0.0.1:8080/actuator/health" -TimeoutSec 10
 if ($health.status -ne "UP") {
     throw "Backend health is not UP"
+}
+
+if (-not $KeepExistingLoadIssues) {
+    docker exec blindway-postgres-1 psql -U blindway -d blindway -v ON_ERROR_STOP=1 `
+        -c "DELETE FROM accessibility_issue i USING app_user u WHERE i.reporter_user_id = u.id AND (i.description LIKE 'LOAD_SEED_%' OR u.email LIKE 'load-user-%@example.org');" | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to reset previous load-test issues"
+    }
 }
 
 $adminEmail = "load-admin-$runId@example.org"

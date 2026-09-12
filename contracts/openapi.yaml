@@ -24,6 +24,8 @@ tags:
     description: 高德Web服务预览适配；连续导航由手机完成
   - name: Internal EMQX
     description: 仅允许EMQX所在内部网络调用的认证与授权接口
+  - name: Operations
+    description: 仅管理员使用的可靠性运维接口
 paths:
   /auth/register:
     post:
@@ -96,6 +98,22 @@ paths:
       responses:
         '204': { description: 刷新令牌已撤销；重复调用仍成功 }
         '400': { $ref: '#/components/responses/Problem' }
+  /admin/mqtt-inbox/{eventId}/replay:
+    post:
+      tags: [Operations]
+      operationId: replayMqttInboxEvent
+      summary: 重放MQTT Inbox终态失败事件
+      description: 仅允许将DEAD或REJECTED事件重新置为PENDING；幂等业务写入保证重放不会重复产生副作用。
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { description: 已进入重放队列 }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
   /devices:
     get:
       tags: [Devices]

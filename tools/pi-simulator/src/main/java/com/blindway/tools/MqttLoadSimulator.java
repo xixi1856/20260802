@@ -37,6 +37,7 @@ public final class MqttLoadSimulator {
         }
 
         AtomicInteger published = new AtomicInteger();
+        AtomicInteger attempted = new AtomicInteger();
         AtomicInteger failed = new AtomicInteger();
         CountDownLatch ready = new CountDownLatch(devices.size());
         CountDownLatch start = new CountDownLatch(1);
@@ -45,7 +46,7 @@ public final class MqttLoadSimulator {
 
         for (Device device : devices) {
             workers.submit(() -> publishForDevice(
-                    broker, device, messagesPerDevice, intervalMs, ready, start, published, failed));
+                    broker, device, messagesPerDevice, intervalMs, ready, start, attempted, published, failed));
         }
 
         if (!ready.await(30, TimeUnit.SECONDS)) {
@@ -62,7 +63,7 @@ public final class MqttLoadSimulator {
         double elapsedSeconds = Math.max(0.001, Duration.between(startedAt, Instant.now()).toMillis() / 1000.0);
         System.out.printf(
                 "devices=%d attempted=%d published=%d failed=%d elapsedSeconds=%.3f publishRate=%.2f msg/s%n",
-                devices.size(), devices.size() * messagesPerDevice, published.get(), failed.get(), elapsedSeconds,
+                devices.size(), attempted.get(), published.get(), failed.get(), elapsedSeconds,
                 published.get() / elapsedSeconds);
         if (failed.get() > 0) {
             System.exit(1);
@@ -76,6 +77,7 @@ public final class MqttLoadSimulator {
             long intervalMs,
             CountDownLatch ready,
             CountDownLatch start,
+            AtomicInteger attempted,
             AtomicInteger published,
             AtomicInteger failed) {
         UUID bootId = UUID.randomUUID();
@@ -85,6 +87,7 @@ public final class MqttLoadSimulator {
             options.setPassword(device.secret().toCharArray());
             options.setConnectionTimeout(10);
             options.setKeepAliveInterval(20);
+            options.setMaxInflight(Math.max(10, Math.min(messagesPerDevice, 1000)));
             client.connect(options);
             ready.countDown();
             start.await();
@@ -94,6 +97,7 @@ public final class MqttLoadSimulator {
                 String json = envelope(device, bootId, sequence, occurredAt);
                 MqttMessage message = new MqttMessage(json.getBytes(StandardCharsets.UTF_8));
                 message.setQos(1);
+                attempted.incrementAndGet();
                 client.publish("blindway/v1/devices/" + device.deviceId() + "/path-events", message);
                 published.incrementAndGet();
                 if (intervalMs > 0 && sequence < messagesPerDevice) {

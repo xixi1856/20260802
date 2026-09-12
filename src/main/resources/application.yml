@@ -1,6 +1,14 @@
 spring:
   application:
     name: blindway-backend
+  task:
+    scheduling:
+      pool:
+        size: 4
+      thread-name-prefix: blindway-scheduler-
+      shutdown:
+        await-termination: true
+        await-termination-period: 30s
   datasource:
     url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/blindway}
     username: ${DATABASE_USERNAME:blindway}
@@ -16,6 +24,27 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:29092,localhost:39092,localhost:49092}
+    producer:
+      acks: all
+      retries: 2147483647
+      properties:
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 5
+        delivery.timeout.ms: 60000
+        linger.ms: 5
+        batch.size: 65536
+        compression.type: lz4
+    consumer:
+      enable-auto-commit: false
+      auto-offset-reset: earliest
+      properties:
+        isolation.level: read_committed
+    listener:
+      ack-mode: record
+    admin:
+      fail-fast: true
   flyway:
     enabled: true
     locations: classpath:db/migration
@@ -67,11 +96,32 @@ blindway:
     refresh-token-ttl: P7D
   mqtt:
     enabled: ${MQTT_ENABLED:false}
+    ingress-mode: ${MQTT_INGRESS_MODE:database}
     broker-uri: ${MQTT_BROKER_URI:tcp://localhost:1883}
-    client-id: ${MQTT_CLIENT_ID:blindway-backend-local}
+    client-id: ${MQTT_CLIENT_ID:${HOSTNAME:blindway-backend-local}}
     username: ${MQTT_BACKEND_USERNAME:blindway-backend}
     password: ${MQTT_BACKEND_PASSWORD:blindway-backend}
     max-payload-bytes: 32768
+    subscription-group: ${MQTT_SUBSCRIPTION_GROUP:blindway-ingress}
+    clean-session: true
+    kafka-send-timeout: ${MQTT_KAFKA_SEND_TIMEOUT:30s}
+    kafka-max-in-flight: ${MQTT_KAFKA_MAX_IN_FLIGHT:1000}
+    worker:
+      owner: ${MQTT_WORKER_OWNER:${HOSTNAME:blindway-local}}
+      batch-size: ${MQTT_INBOX_BATCH_SIZE:50}
+      poll-interval: ${MQTT_INBOX_POLL_INTERVAL:100ms}
+      lease-duration: ${MQTT_INBOX_LEASE_DURATION:30s}
+      max-attempts: ${MQTT_INBOX_MAX_ATTEMPTS:5}
+      metrics-interval: ${MQTT_INBOX_METRICS_INTERVAL:5s}
+  kafka:
+    enabled: ${KAFKA_ENABLED:false}
+    publisher:
+      owner: ${KAFKA_PUBLISHER_OWNER:${HOSTNAME:blindway-local}}
+      batch-size: ${KAFKA_OUTBOX_BATCH_SIZE:50}
+      poll-interval: ${KAFKA_OUTBOX_POLL_INTERVAL:100ms}
+      lease-duration: ${KAFKA_OUTBOX_LEASE_DURATION:30s}
+      send-timeout: ${KAFKA_SEND_TIMEOUT:5s}
+      max-attempts: ${KAFKA_OUTBOX_MAX_ATTEMPTS:10}
   minio:
     enabled: ${MINIO_ENABLED:false}
     endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
