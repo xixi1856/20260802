@@ -1,9 +1,12 @@
 package com.blindway.perception.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -83,6 +86,33 @@ class MqttInboxProcessorTest {
 
         assertThat(result).isEqualTo(MqttInboxProcessor.Outcome.REJECTED);
         verify(mapper).markRejected(eq(row.eventId()), eq(OWNER), eq("INVALID_PAYLOAD"), any());
+    }
+
+    @Test
+    void outboxFailureDoesNotMarkInboxProcessed() throws Exception {
+        MqttInboxRow row = row("heartbeat", "heartbeat.valid.json", 1);
+        when(devices.existsAndEnabled(DEVICE_ID)).thenReturn(true);
+        doThrow(new IllegalStateException("outbox unavailable"))
+                .when(outbox)
+                .append(any(), anyString(), any(), anyString(), anyString(), anyString(), any());
+
+        assertThatThrownBy(() -> processor.process(row, OWNER))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("outbox unavailable");
+
+        verify(mapper, never()).markProcessed(any(), anyString(), any(), any());
+    }
+
+    @Test
+    void lostInboxLeaseFailsAfterOutboxAppendSoTransactionCanRollBack() throws Exception {
+        MqttInboxRow row = row("heartbeat", "heartbeat.valid.json", 1);
+        when(devices.existsAndEnabled(DEVICE_ID)).thenReturn(true);
+
+        assertThatThrownBy(() -> processor.process(row, OWNER))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("lease was lost");
+
+        verify(outbox).append(any(), anyString(), any(), anyString(), anyString(), anyString(), any());
     }
 
     private MqttInboxRow row(String topicSuffix, String file, int attemptCount) throws Exception {

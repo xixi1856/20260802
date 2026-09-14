@@ -4,6 +4,7 @@ import com.blindway.common.IntegrationEventOutbox;
 import com.blindway.common.infrastructure.EventOutboxMapper;
 import java.time.Instant;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
@@ -13,10 +14,15 @@ public class TransactionalIntegrationEventOutbox implements IntegrationEventOutb
 
     private final EventOutboxMapper mapper;
     private final ObjectMapper objectMapper;
+    private final boolean kafkaEnabled;
 
-    public TransactionalIntegrationEventOutbox(EventOutboxMapper mapper, ObjectMapper objectMapper) {
+    public TransactionalIntegrationEventOutbox(
+            EventOutboxMapper mapper,
+            ObjectMapper objectMapper,
+            @Value("${blindway.kafka.enabled:false}") boolean kafkaEnabled) {
         this.mapper = mapper;
         this.objectMapper = objectMapper;
+        this.kafkaEnabled = kafkaEnabled;
     }
 
     @Override
@@ -28,6 +34,9 @@ public class TransactionalIntegrationEventOutbox implements IntegrationEventOutb
             String topic,
             String partitionKey,
             Object payload) {
+        if (!kafkaEnabled) {
+            return;
+        }
         try {
             mapper.insert(
                     eventId,

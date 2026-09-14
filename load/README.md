@@ -69,7 +69,7 @@ mvn --% -q -f tools\pi-simulator\pom.xml -Dexec.mainClass=com.blindway.tools.Mqt
 
 ```powershell
 $env:KAFKA_ENABLED='true'
-$env:MQTT_INGRESS_MODE='kafka'
+$env:MQTT_INGRESS_MODE='database' # 旧配置项待 Kafka-first 数据盘点后移除
 docker compose --profile kafka --profile app up -d --build --scale backend=2
 
 $startedAt = Get-Date
