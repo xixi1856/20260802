@@ -19,12 +19,14 @@ mvn spring-boot:run -Dspring-boot.run.profiles=local
 ```powershell
 mvn package
 $env:KAFKA_ENABLED='true'
-$env:MQTT_INGRESS_MODE='kafka'
+$env:MQTT_INGRESS_MODE='database' # 旧配置项待 Kafka-first 数据盘点后移除
 docker compose --profile kafka --profile app up -d --build --scale backend=2
 ```
 
-该模式通过本地 Nginx 暴露 `8080`，运行两个后端实例和三个 Kafka KRaft 节点。只需要单实例且不启用事件扇出时，保持
-`KAFKA_ENABLED=false`、`MQTT_INGRESS_MODE=database` 并省略 `kafka` profile。
+该模式通过本地 Nginx 暴露 `8080`，运行两个后端实例和三个 Kafka KRaft 节点。默认接入模式为 PostgreSQL Inbox；
+`KAFKA_ENABLED=true` 时，业务处理事务同时写 Outbox，由 Kafka 扇出到三个消费组。只需要单实例且不启用事件扇出时，保持
+`KAFKA_ENABLED=false` 并省略 `kafka` profile；此时不再新增 Outbox 记录，已有待发布记录仍保留，需按部署手册处理。
+历史 Kafka-first 入口在完成 raw ingress topic 和 DLT 的数据盘点前不得从运行环境移除。
 
 健康检查：`GET http://localhost:8080/actuator/health`。
 
