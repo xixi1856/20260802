@@ -83,7 +83,7 @@ final class MqttIngressCallback implements MqttCallbackExtended {
         try {
             client.messageArrivedComplete(messageId, qos);
         } catch (Exception exception) {
-            log.error("Kafka accepted MQTT message but MQTT ACK failed; duplicate delivery is expected", exception);
+            log.error("MQTT message was durably accepted but MQTT ACK failed; duplicate delivery is expected", exception);
             scheduleReconnect();
         }
     }

@@ -24,6 +24,8 @@ WITH test_events AS (
 ), counts AS (
     SELECT
         (SELECT count(*) FROM test_events) AS outbox_total,
+        (SELECT count(*) FROM mqtt_inbox i JOIN test_events t ON t.id = i.event_id
+         WHERE i.process_status = 'PROCESSED') AS inbox_processed,
         (SELECT count(*) FROM integration_event_outbox o JOIN test_events t ON t.id = o.id
          WHERE o.status = 'PUBLISHED') AS outbox_published,
         (SELECT count(*) FROM kafka_consumed_event c JOIN test_events t ON t.id = c.event_id
@@ -33,7 +35,7 @@ WITH test_events AS (
         (SELECT count(*) FROM kafka_consumed_event c JOIN test_events t ON t.id = c.event_id
          WHERE c.consumer_name = 'device-analytics-v1') AS analytics_consumed
 )
-SELECT outbox_total, outbox_published, community_consumed, trip_consumed, analytics_consumed
+SELECT outbox_total, inbox_processed, outbox_published, community_consumed, trip_consumed, analytics_consumed
 FROM counts;
 "@
 
@@ -49,7 +51,7 @@ function Read-ConservationCounters {
     return $result.Trim().Split(',') | ForEach-Object { [int64]$_ }
 }
 
-$names = @('outbox_total', 'outbox_published', 'community_consumed', 'trip_consumed', 'analytics_consumed')
+$names = @('outbox_total', 'inbox_processed', 'outbox_published', 'community_consumed', 'trip_consumed', 'analytics_consumed')
 $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
 do {
     $values = @(Read-ConservationCounters)

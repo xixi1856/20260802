@@ -6,6 +6,7 @@
 - MQTT Topic、操作和消息说明：`contracts/asyncapi.yaml`。
 - MQTT载荷约束：`contracts/schemas/mqtt/*.schema.json`。
 - 可执行样例：`contracts/examples/rest`与`contracts/examples/mqtt`。
+- 树莓派双目视觉、YOLOv5-Lite结果到MQTT消息的映射说明：[`PI_STEREO_YOLOV5_LITE_PROTOCOL.md`](PI_STEREO_YOLOV5_LITE_PROTOCOL.md)。
 
 README和本文只说明使用方式，不复制完整字段定义。生成目录`target/contract-docs`不得手工编辑或提交。
 
