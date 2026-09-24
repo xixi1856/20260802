@@ -6,7 +6,9 @@ import java.util.UUID;
 public record RouteRiskRow(
         UUID issueId,
         IssueType type,
-        int severity,
-        int confidenceScore,
-        double distanceToRouteMeters,
-        int contribution) {}
+        String riskLevel,
+        double longitude,
+        double latitude,
+        double nearestLongitude,
+        double nearestLatitude,
+        double distanceToRouteMeters) {}

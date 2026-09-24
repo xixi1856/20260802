@@ -13,16 +13,11 @@ generated AS (
         number,
         gen_random_uuid() AS id,
         CURRENT_TIMESTAMP - random() * interval '90 days' AS occurred_at,
-        116.397128
-            + CASE
-                WHEN number % 10 < 7 THEN (random() - 0.5) * 0.01
-                ELSE (random() - 0.5) * 0.20
-            END AS longitude,
+        116.397128 + (random() - 0.5) * 0.116 AS longitude,
         39.916527
-            + CASE
-                WHEN number % 10 < 7 THEN (random() - 0.5) * 0.01
-                ELSE (random() - 0.5) * 0.20
-            END AS latitude
+            + CASE WHEN number <= LEAST(:issue_count::integer, 30)
+                THEN (random() - 0.5) * 0.00027
+                ELSE (random() - 0.5) * 0.090 END AS latitude
     FROM generate_series(1, :issue_count::integer) AS number
 )
 SELECT
@@ -38,7 +33,23 @@ SELECT
         'AUDIBLE_SIGNAL',
         'ACCESSIBLE_PLACE'
     ])[1 + number % 8] AS issue_type,
-    (ARRAY['PENDING', 'VERIFIED', 'PROCESSING'])[1 + number % 3] AS issue_status
+    CASE number % 10
+        WHEN 0 THEN 'VERIFIED'
+        WHEN 1 THEN 'VERIFIED'
+        WHEN 2 THEN 'VERIFIED'
+        WHEN 3 THEN 'VERIFIED'
+        WHEN 4 THEN 'PROCESSING'
+        WHEN 5 THEN 'PROCESSING'
+        WHEN 6 THEN 'PENDING'
+        WHEN 7 THEN 'PENDING'
+        WHEN 8 THEN 'REJECTED'
+        ELSE 'RESOLVED'
+    END AS issue_status,
+    CASE
+        WHEN number % 20 < 2 THEN 'HIGH'
+        WHEN number % 20 < 8 THEN 'MEDIUM'
+        ELSE 'LOW'
+    END AS risk_level
 FROM generated
 CROSS JOIN seed_user;
 
@@ -53,6 +64,7 @@ INSERT INTO accessibility_issue (
     created_at,
     updated_at,
     severity,
+    verified_risk_level,
     report_count,
     confirmation_count,
     rejection_count,
@@ -70,6 +82,7 @@ SELECT
     occurred_at,
     occurred_at,
     1 + number % 5,
+    CASE WHEN issue_status IN ('VERIFIED', 'PROCESSING') THEN risk_level ELSE NULL END,
     1 + number % 10,
     number % 5,
     number % 2,

@@ -1,3 +1,4 @@
 {
-  "note": "缺少decision"
+  "decision": "CONFIRM",
+  "note": "确认票缺少风险等级"
 }

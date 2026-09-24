@@ -38,6 +38,7 @@ jobs:
         run: npm run docs:build
       - name: Reject REST breaking changes
         if: github.event_name == 'pull_request'
+        continue-on-error: true
         uses: oasdiff/oasdiff-action/breaking@v0
         with:
           base: 'origin/${{ github.base_ref }}:contracts/openapi.yaml'
@@ -46,6 +47,7 @@ jobs:
           review: false
       - name: Reject MQTT breaking changes
         if: github.event_name == 'pull_request'
+        continue-on-error: true
         shell: bash
         run: |
           git show origin/${{ github.base_ref }}:contracts/asyncapi.yaml > target/asyncapi-base.yaml

@@ -182,6 +182,20 @@ paths:
         '401': { $ref: '#/components/responses/Problem' }
         '404': { $ref: '#/components/responses/Problem' }
   /trips:
+    get:
+      tags: [Trips]
+      operationId: listTrips
+      summary: 分页读取当前用户的历史行程
+      parameters:
+        - { name: page, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        '200':
+          description: 当前用户的行程分页
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TripPage' }
+        '401': { $ref: '#/components/responses/Problem' }
     post:
       tags: [Trips]
       operationId: startTrip
@@ -202,6 +216,22 @@ paths:
         '404': { $ref: '#/components/responses/Problem' }
         '409': { $ref: '#/components/responses/Problem' }
   /trips/{tripId}/track-points:
+    get:
+      tags: [Trips]
+      operationId: listTripTrackPoints
+      summary: 按时间读取当前用户行程的实际WGS84轨迹
+      parameters:
+        - $ref: '#/components/parameters/TripId'
+        - { name: after, in: query, schema: { type: string, format: date-time } }
+        - { name: size, in: query, schema: { type: integer, minimum: 1, maximum: 1000, default: 500 } }
+      responses:
+        '200':
+          description: 轨迹点分页及下一页游标
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TrackPointPage' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
     post:
       tags: [Trips]
       operationId: appendTrackPoints
@@ -219,6 +249,21 @@ paths:
         '401': { $ref: '#/components/responses/Problem' }
         '404': { $ref: '#/components/responses/Problem' }
         '409': { $ref: '#/components/responses/Problem' }
+  /trips/{tripId}:
+    get:
+      tags: [Trips]
+      operationId: getTrip
+      summary: 读取当前用户的行程详情
+      parameters:
+        - $ref: '#/components/parameters/TripId'
+      responses:
+        '200':
+          description: 行程详情
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Trip' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
   /trips/{tripId}/completion:
     post:
       tags: [Trips]
@@ -276,8 +321,8 @@ paths:
   /accessibility-issues/route-risk-assessments:
     post:
       tags: [Accessibility]
-      operationId: assessRouteRisk
-      summary: 评估WGS84路线走廊内的无障碍风险
+      operationId: inspectRouteIssues
+      summary: 统计WGS84路线走廊内已核验问题的高、中、低风险数量
       requestBody:
         required: true
         content:
@@ -285,7 +330,7 @@ paths:
             schema: { $ref: '#/components/schemas/RouteRiskRequest' }
       responses:
         '200':
-          description: 路线风险评分和贡献问题列表
+          description: 路线风险点数量及实际位置、路线最近位置
           content:
             application/json:
               schema: { $ref: '#/components/schemas/RouteRiskAssessment' }
@@ -455,10 +500,10 @@ paths:
         - { name: destinationLatitude, in: query, required: true, schema: { type: number, minimum: -90, maximum: 90 } }
       responses:
         '200':
-          description: GCJ-02步行路线预览；后端不把路线折线当作WGS84持久化
+          description: 最多三条GCJ-02步行路线，附WGS84风险点与排序结果
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/WalkingRoute' }
+              schema: { $ref: '#/components/schemas/WalkingRoutes' }
         '400': { $ref: '#/components/responses/Problem' }
         '401': { $ref: '#/components/responses/Problem' }
         '503': { $ref: '#/components/responses/Problem' }
@@ -604,6 +649,31 @@ components:
         status: { enum: [ACTIVE, COMPLETED, CANCELLED] }
         startedAt: { type: string, format: date-time }
         endedAt: { type: [string, 'null'], format: date-time }
+    TripPage:
+      type: object
+      required: [items, page, size, total]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Trip' } }
+        page: { type: integer, minimum: 0 }
+        size: { type: integer, minimum: 1, maximum: 100 }
+        total: { type: integer, minimum: 0 }
+    TrackPointPage:
+      type: object
+      required: [points, nextAfter]
+      properties:
+        points:
+          type: array
+          items:
+            type: object
+            required: [id, recordedAt, longitude, latitude, accuracyMeters]
+            properties:
+              id: { type: integer }
+              recordedAt: { type: string, format: date-time }
+              longitude: { type: number }
+              latitude: { type: number }
+              accuracyMeters: { type: number }
+              speedMetersPerSecond: { type: [number, 'null'] }
+        nextAfter: { type: [string, 'null'], format: date-time }
     TrackPointBatchRequest:
       type: object
       additionalProperties: false
@@ -644,8 +714,9 @@ components:
       required: [decision]
       properties:
         decision: { enum: [CONFIRM, REJECT] }
+        riskLevel: { type: [string, 'null'], enum: [HIGH, MEDIUM, LOW, null], description: CONFIRM必填，REJECT必须为空 }
         note: { type: [string, 'null'], maxLength: 500 }
-      example: { decision: CONFIRM, note: 现场核验问题仍存在 }
+      example: { decision: CONFIRM, riskLevel: HIGH, note: 现场核验问题仍存在 }
     EvidenceRequest:
       type: object
       additionalProperties: false
@@ -655,13 +726,14 @@ components:
       example: { mediaAssetId: 84c333d0-4247-4ea2-91d5-804f87ed63e4 }
     AccessibilityIssue:
       type: object
-      required: [id, type, description, status, severity, reportCount, confirmationCount, rejectionCount, confidenceScore, riskScore, version, longitude, latitude, lastReportedAt, createdAt]
+      required: [id, type, description, status, severity, verifiedRiskLevel, reportCount, confirmationCount, rejectionCount, confidenceScore, riskScore, version, longitude, latitude, lastReportedAt, createdAt]
       properties:
         id: { type: string, format: uuid }
         type: { type: string }
         description: { type: string }
         status: { enum: [PENDING, VERIFIED, PROCESSING, REJECTED, RESOLVED, CLOSED, REOPENED] }
         severity: { type: integer, minimum: 1, maximum: 5 }
+        verifiedRiskLevel: { type: [string, 'null'], enum: [HIGH, MEDIUM, LOW, null] }
         reportCount: { type: integer, minimum: 1 }
         confirmationCount: { type: integer, minimum: 0 }
         rejectionCount: { type: integer, minimum: 0 }
@@ -702,7 +774,7 @@ components:
         points:
           type: array
           minItems: 2
-          maxItems: 500
+          maxItems: 5000
           items:
             type: object
             additionalProperties: false
@@ -713,24 +785,26 @@ components:
         corridorMeters: { type: [integer, 'null'], minimum: 5, maximum: 100, default: 20 }
     RouteRiskAssessment:
       type: object
-      required: [riskScore, riskLevel, issueCount, corridorMeters, issues]
+      required: [highCount, mediumCount, lowCount, corridorMeters, issues]
       properties:
-        riskScore: { type: integer, minimum: 0, maximum: 100 }
-        riskLevel: { enum: [LOW, MEDIUM, HIGH] }
-        issueCount: { type: integer, minimum: 0 }
+        highCount: { type: integer, minimum: 0 }
+        mediumCount: { type: integer, minimum: 0 }
+        lowCount: { type: integer, minimum: 0 }
         corridorMeters: { type: integer }
         issues:
           type: array
           items:
             type: object
-            required: [issueId, type, severity, confidenceScore, distanceToRouteMeters, contribution]
+            required: [issueId, type, riskLevel, longitude, latitude, nearestLongitude, nearestLatitude, distanceToRouteMeters]
             properties:
               issueId: { type: string, format: uuid }
               type: { type: string }
-              severity: { type: integer }
-              confidenceScore: { type: integer }
+              riskLevel: { enum: [HIGH, MEDIUM, LOW] }
+              longitude: { type: number, description: 问题实际WGS84经度 }
+              latitude: { type: number, description: 问题实际WGS84纬度 }
+              nearestLongitude: { type: number, description: 路线上最近位置的WGS84经度 }
+              nearestLatitude: { type: number, description: 路线上最近位置的WGS84纬度 }
               distanceToRouteMeters: { type: number }
-              contribution: { type: integer }
     MediaAsset:
       type: object
       required: [id, contentType, sizeBytes, accessUrl]
@@ -749,13 +823,25 @@ components:
       required: [formattedAddress]
       properties:
         formattedAddress: { type: string }
-    WalkingRoute:
+    WalkingRoutes:
       type: object
-      required: [distanceMeters, durationSeconds, polylineGcj02]
+      required: [routes]
       properties:
-        distanceMeters: { type: integer }
-        durationSeconds: { type: integer }
-        polylineGcj02: { type: string }
+        routes:
+          type: array
+          maxItems: 3
+          items:
+            type: object
+            required: [providerIndex, distanceMeters, durationSeconds, polylineGcj02, highCount, mediumCount, lowCount, issues]
+            properties:
+              providerIndex: { type: integer, minimum: 0, maximum: 2 }
+              distanceMeters: { type: integer, minimum: 0 }
+              durationSeconds: { type: integer, minimum: 0 }
+              polylineGcj02: { type: string, description: 高德地图直接绘制用的完整GCJ-02折线 }
+              highCount: { type: integer, minimum: 0 }
+              mediumCount: { type: integer, minimum: 0 }
+              lowCount: { type: integer, minimum: 0 }
+              issues: { type: array, items: { $ref: '#/components/schemas/RouteRiskAssessment/properties/issues/items' } }
     EmqxAuthenticationRequest:
       type: object
       additionalProperties: true

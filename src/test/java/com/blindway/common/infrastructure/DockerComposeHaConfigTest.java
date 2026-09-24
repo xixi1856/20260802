@@ -38,6 +38,14 @@ class DockerComposeHaConfigTest {
         assertThat(compose).contains("EMQX_MQTT__MAX_INFLIGHT: 128").contains("EMQX_MQTT__MAX_MQUEUE_LEN: 10000");
     }
 
+    @Test
+    void logArchiveUsesDedicatedFileVolumeAndKafkaCollector() {
+        assertThat(compose)
+                .contains("LOGGING_FILE_NAME: /var/log/blindway/application.json")
+                .contains("backend-logs:/var/log/blindway:ro")
+                .contains("./ops/fluent-bit.conf:/fluent-bit/etc/blindway.conf:ro");
+    }
+
     private static String readCompose() {
         try {
             return Files.readString(Path.of("docker-compose.yml"));

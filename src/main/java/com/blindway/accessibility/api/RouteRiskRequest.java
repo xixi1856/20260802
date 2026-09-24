@@ -11,7 +11,7 @@ import jakarta.validation.constraints.Size;
 import java.util.List;
 
 public record RouteRiskRequest(
-        @NotEmpty @Size(min = 2, max = 500) List<@Valid Point> points, @Min(5) @Max(100) Integer corridorMeters) {
+        @NotEmpty @Size(min = 2, max = 5000) List<@Valid Point> points, @Min(5) @Max(100) Integer corridorMeters) {
 
     public record Point(
             @NotNull @DecimalMin("-180") @DecimalMax("180") Double longitude,

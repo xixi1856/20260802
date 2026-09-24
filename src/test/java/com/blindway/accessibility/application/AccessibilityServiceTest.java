@@ -74,19 +74,29 @@ class AccessibilityServiceTest {
     }
 
     @Test
-    void scoresRouteFromNearbyIssueContributions() {
+    void countsVerifiedIssuesWithoutRouteScore() {
         when(mapper.findRouteRisks("LINESTRING(116.39 39.91,116.4 39.92)", 20))
                 .thenReturn(List.of(
-                        new RouteRiskRow(UUID.randomUUID(), IssueType.CONSTRUCTION, 5, 80, 3.5, 32),
-                        new RouteRiskRow(UUID.randomUUID(), IssueType.TACTILE_PAVING_DAMAGED, 3, 60, 12.0, 11)));
+                        new RouteRiskRow(
+                                UUID.randomUUID(), IssueType.CONSTRUCTION, "HIGH", 116.39, 39.91, 116.391, 39.911, 3.5),
+                        new RouteRiskRow(
+                                UUID.randomUUID(),
+                                IssueType.TACTILE_PAVING_DAMAGED,
+                                "MEDIUM",
+                                116.4,
+                                39.92,
+                                116.401,
+                                39.921,
+                                12.0)));
         AccessibilityService service = service();
 
         var result = service.assessRoute(new RouteRiskRequest(
                 List.of(new RouteRiskRequest.Point(116.39, 39.91), new RouteRiskRequest.Point(116.4, 39.92)), null));
 
-        org.assertj.core.api.Assertions.assertThat(result.riskScore()).isEqualTo(43);
-        org.assertj.core.api.Assertions.assertThat(result.riskLevel()).isEqualTo("MEDIUM");
-        org.assertj.core.api.Assertions.assertThat(result.issueCount()).isEqualTo(2);
+        org.assertj.core.api.Assertions.assertThat(result.highCount()).isEqualTo(1);
+        org.assertj.core.api.Assertions.assertThat(result.mediumCount()).isEqualTo(1);
+        org.assertj.core.api.Assertions.assertThat(result.lowCount()).isZero();
+        org.assertj.core.api.Assertions.assertThat(result.issues()).hasSize(2);
         org.assertj.core.api.Assertions.assertThat(result.corridorMeters()).isEqualTo(20);
     }
 
@@ -137,11 +147,18 @@ class AccessibilityServiceTest {
     void verifiesIssueAfterTwoConfirmations() {
         UUID issueId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
-        when(mapper.findById(issueId)).thenReturn(Optional.of(issue(issueId, "PENDING")));
+        when(mapper.findByIdForUpdate(issueId)).thenReturn(Optional.of(issue(issueId, "PENDING")));
         when(mapper.countVerifications(issueId)).thenReturn(new VerificationCounts(2, 0));
+        when(mapper.winningRiskLevel(issueId)).thenReturn(Optional.of("HIGH"));
+        when(mapper.updateStatus(eq(issueId), eq("VERIFIED"), any(Instant.class)))
+                .thenReturn(1);
         AccessibilityService service = service();
 
-        service.verify(userId, issueId, new VerificationRequest(VerificationRequest.Decision.CONFIRM, "现场仍然存在"));
+        service.verify(
+                userId,
+                issueId,
+                new VerificationRequest(
+                        VerificationRequest.Decision.CONFIRM, VerificationRequest.RiskLevel.HIGH, "现场仍然存在"));
 
         verify(mapper).updateStatus(eq(issueId), eq("VERIFIED"), any(Instant.class));
         verify(mapper)
@@ -158,11 +175,14 @@ class AccessibilityServiceTest {
     @Test
     void doesNotChangeStateWithOnlyOneConfirmation() {
         UUID issueId = UUID.randomUUID();
-        when(mapper.findById(issueId)).thenReturn(Optional.of(issue(issueId, "PENDING")));
+        when(mapper.findByIdForUpdate(issueId)).thenReturn(Optional.of(issue(issueId, "PENDING")));
         when(mapper.countVerifications(issueId)).thenReturn(new VerificationCounts(1, 0));
         AccessibilityService service = service();
 
-        service.verify(UUID.randomUUID(), issueId, new VerificationRequest(VerificationRequest.Decision.CONFIRM, null));
+        service.verify(
+                UUID.randomUUID(),
+                issueId,
+                new VerificationRequest(VerificationRequest.Decision.CONFIRM, VerificationRequest.RiskLevel.LOW, null));
 
         verify(mapper, never()).updateStatus(any(), any(), any());
     }
@@ -170,15 +190,16 @@ class AccessibilityServiceTest {
     @Test
     void rejectsVerificationForResolvedIssue() {
         UUID issueId = UUID.randomUUID();
-        when(mapper.findById(issueId)).thenReturn(Optional.of(issue(issueId, "RESOLVED")));
+        when(mapper.findByIdForUpdate(issueId)).thenReturn(Optional.of(issue(issueId, "RESOLVED")));
         AccessibilityService service = service();
 
         assertThatThrownBy(() -> service.verify(
                         UUID.randomUUID(),
                         issueId,
-                        new VerificationRequest(VerificationRequest.Decision.CONFIRM, null)))
+                        new VerificationRequest(
+                                VerificationRequest.Decision.CONFIRM, VerificationRequest.RiskLevel.HIGH, null)))
                 .isInstanceOf(ApiException.class)
-                .hasMessage("问题已解决");
+                .hasMessage("当前问题状态不允许投票");
     }
 
     @Test
@@ -205,6 +226,7 @@ class AccessibilityServiceTest {
                 "盲道破损",
                 status,
                 3,
+                null,
                 1,
                 0,
                 0,

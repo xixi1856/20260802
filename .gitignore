@@ -13,3 +13,4 @@ load/results/
 *.jfr
 .DS_Store
 Thumbs.db
+oracleJdk-25.jdk/

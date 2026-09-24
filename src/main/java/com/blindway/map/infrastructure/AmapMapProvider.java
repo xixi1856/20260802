@@ -46,7 +46,7 @@ public class AmapMapProvider implements MapProvider {
     }
 
     @Override
-    public WalkingRoute walkingRoute(
+    public List<WalkingRoute> walkingRoutes(
             double originLongitude, double originLatitude, double destinationLongitude, double destinationLatitude) {
         Coordinate origin = convert(originLongitude, originLatitude);
         Coordinate destination = convert(destinationLongitude, destinationLatitude);
@@ -58,18 +58,52 @@ public class AmapMapProvider implements MapProvider {
                 .encode()
                 .toUri();
         JsonNode root = call(uri);
-        JsonNode path = root.path("route").path("paths").path(0);
-        if (path.isMissingNode()) {
+        JsonNode paths = root.path("route").path("paths");
+        if (!paths.isArray() || paths.isEmpty()) {
             throw unavailable("AMAP_NO_ROUTE", "高德未返回步行路线");
         }
-        List<String> polylines = new ArrayList<>();
-        for (JsonNode step : path.path("steps")) {
-            String polyline = step.path("polyline").asString();
-            if (polyline != null && !polyline.isBlank()) {
-                polylines.add(polyline);
+        List<WalkingRoute> routes = new ArrayList<>();
+        for (int index = 0; index < Math.min(3, paths.size()); index++) {
+            JsonNode path = paths.path(index);
+            List<String> vertices = new ArrayList<>();
+            List<Point> wgs84 = new ArrayList<>();
+            for (JsonNode step : path.path("steps")) {
+                String polyline = step.path("polyline").asString();
+                if (polyline == null || polyline.isBlank()) {
+                    continue;
+                }
+                for (String vertex : polyline.split(";")) {
+                    if (!vertices.isEmpty() && vertices.getLast().equals(vertex)) {
+                        continue;
+                    }
+                    String[] coordinates = vertex.split(",");
+                    if (coordinates.length != 2) {
+                        throw unavailable("AMAP_INVALID_RESPONSE", "高德路线折线无效");
+                    }
+                    try {
+                        double longitude = Double.parseDouble(coordinates[0]);
+                        double latitude = Double.parseDouble(coordinates[1]);
+                        if (!Double.isFinite(longitude) || !Double.isFinite(latitude)) {
+                            throw new NumberFormatException("Non-finite coordinate");
+                        }
+                        var point = Gcj02Coordinates.toWgs84(longitude, latitude);
+                        vertices.add(vertex);
+                        wgs84.add(new Point(point.longitude(), point.latitude()));
+                    } catch (NumberFormatException exception) {
+                        throw unavailable("AMAP_INVALID_RESPONSE", "高德路线折线无效");
+                    }
+                }
             }
+            if (vertices.size() < 2 || vertices.size() > 5000) {
+                throw unavailable("AMAP_INVALID_RESPONSE", "高德路线折线点数无效");
+            }
+            routes.add(new WalkingRoute(
+                    integer(path, "distance"),
+                    integer(path, "duration"),
+                    String.join(";", vertices),
+                    List.copyOf(wgs84)));
         }
-        return new WalkingRoute(integer(path, "distance"), integer(path, "duration"), String.join(";", polylines));
+        return routes;
     }
 
     private Coordinate convert(double longitude, double latitude) {

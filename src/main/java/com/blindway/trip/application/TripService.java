@@ -3,6 +3,8 @@ package com.blindway.trip.application;
 import com.blindway.common.api.ApiException;
 import com.blindway.trip.TripLocationAccess;
 import com.blindway.trip.api.TrackPointInput;
+import com.blindway.trip.api.TrackPointPageResponse;
+import com.blindway.trip.api.TripPageResponse;
 import com.blindway.trip.api.TripResponse;
 import com.blindway.trip.infrastructure.TrackPointMatchRow;
 import com.blindway.trip.infrastructure.TripMapper;
@@ -38,6 +40,42 @@ public class TripService implements TripLocationAccess {
             throw new ApiException(HttpStatus.CONFLICT, "DEVICE_HAS_ACTIVE_TRIP", "设备已有进行中的行程");
         }
         return response(trip);
+    }
+
+    @Transactional(readOnly = true)
+    public TripPageResponse history(UUID userId, int page, int size) {
+        long offset = (long) page * size;
+        return new TripPageResponse(
+                mapper.findByUser(userId, size, offset).stream()
+                        .map(this::response)
+                        .toList(),
+                page,
+                size,
+                mapper.countByUser(userId));
+    }
+
+    @Transactional(readOnly = true)
+    public TripResponse get(UUID userId, UUID tripId) {
+        return response(ownedTrip(userId, tripId));
+    }
+
+    @Transactional(readOnly = true)
+    public TrackPointPageResponse trackPoints(UUID userId, UUID tripId, Instant after, int size) {
+        ownedTrip(userId, tripId);
+        var rows = mapper.findTrackPoints(tripId, after, size + 1);
+        boolean more = rows.size() > size;
+        var page = more ? rows.subList(0, size) : rows;
+        return new TrackPointPageResponse(
+                page.stream()
+                        .map(row -> new TrackPointPageResponse.TrackPoint(
+                                row.id(),
+                                row.recordedAt(),
+                                row.longitude(),
+                                row.latitude(),
+                                row.accuracyMeters(),
+                                row.speedMetersPerSecond()))
+                        .toList(),
+                more ? page.getLast().recordedAt() : null);
     }
 
     @Transactional
@@ -111,10 +149,15 @@ public class TripService implements TripLocationAccess {
     }
 
     private TripRow ownedActiveTrip(UUID userId, UUID tripId) {
-        return mapper.findById(tripId)
-                .filter(trip -> trip.userId().equals(userId))
+        return java.util.Optional.of(ownedTrip(userId, tripId))
                 .filter(trip -> "ACTIVE".equals(trip.status()))
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "ACTIVE_TRIP_NOT_FOUND", "进行中的行程不存在"));
+    }
+
+    private TripRow ownedTrip(UUID userId, UUID tripId) {
+        return mapper.findById(tripId)
+                .filter(trip -> trip.userId().equals(userId))
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "TRIP_NOT_FOUND", "行程不存在"));
     }
 
     private TripResponse response(TripRow row) {

@@ -8,13 +8,13 @@ const rate = Number(__ENV.RATE || 20);
 const duration = __ENV.DURATION || '30s';
 const corridorMeters = Number(__ENV.CORRIDOR_METERS || 20);
 const pointCount = Number(__ENV.POINT_COUNT || 20);
-const routeVariants = Number(__ENV.ROUTE_VARIANTS || 1009);
+const routeVariants = Number(__ENV.ROUTE_VARIANTS || 101);
 const routeStatus200 = new Counter('route_status_200');
 const routeStatus429 = new Counter('route_status_429');
 const routeStatusOther = new Counter('route_status_other');
 
-if (pointCount < 2 || pointCount > 500) {
-  throw new Error('POINT_COUNT must be between 2 and 500');
+if (pointCount < 2 || pointCount > 5000) {
+  throw new Error('POINT_COUNT must be between 2 and 5000');
 }
 if (routeVariants < 1) {
   throw new Error('ROUTE_VARIANTS must be positive');
@@ -51,8 +51,8 @@ export function assessRoute(data) {
   for (let index = 0; index < pointCount; index += 1) {
     const progress = index / (pointCount - 1);
     points.push({
-      longitude: 116.392 + progress * 0.01045 + shift,
-      latitude: 39.912 + progress * 0.00855 - shift,
+      longitude: 116.342128 + progress * 0.11,
+      latitude: 39.916527 + shift,
     });
   }
 
@@ -68,5 +68,14 @@ export function assessRoute(data) {
   } else {
     routeStatusOther.add(1);
   }
-  check(response, { 'route risk returned 200': (value) => value.status === 200 });
+  check(response, {
+    'route issue counts returned': (value) => {
+      if (value.status !== 200) return false;
+      const body = value.json();
+      return Number.isInteger(body.highCount)
+        && Number.isInteger(body.mediumCount)
+        && Number.isInteger(body.lowCount)
+        && body.riskScore === undefined;
+    },
+  });
 }

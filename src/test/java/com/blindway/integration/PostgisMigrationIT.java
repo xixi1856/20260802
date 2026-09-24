@@ -36,9 +36,12 @@ class PostgisMigrationIT {
                                 + "to_regclass('public.integration_event_outbox') IS NOT NULL, "
                                 + "to_regclass('public.kafka_consumed_event') IS NOT NULL, "
                                 + "to_regclass('public.trip_risk_projection') IS NOT NULL, "
+                                + "to_regclass('public.application_log_archive') IS NOT NULL, "
                                 + "to_regclass('public.idx_mqtt_inbox_claim') IS NOT NULL, "
                                 + "EXISTS (SELECT 1 FROM information_schema.columns "
-                                + "WHERE table_name = 'mqtt_inbox' AND column_name = 'lease_until')")) {
+                                + "WHERE table_name = 'mqtt_inbox' AND column_name = 'lease_until'), "
+                                + "EXISTS (SELECT 1 FROM information_schema.columns "
+                                + "WHERE table_name = 'accessibility_issue' AND column_name = 'verified_risk_level')")) {
             assertThat(result.next()).isTrue();
             assertThat(result.getString(1)).isNotBlank();
             assertThat(result.getBoolean(2)).isTrue();
@@ -48,6 +51,8 @@ class PostgisMigrationIT {
             assertThat(result.getBoolean(6)).isTrue();
             assertThat(result.getBoolean(7)).isTrue();
             assertThat(result.getBoolean(8)).isTrue();
+            assertThat(result.getBoolean(9)).isTrue();
+            assertThat(result.getBoolean(10)).isTrue();
         }
     }
 

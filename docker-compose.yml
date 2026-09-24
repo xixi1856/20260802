@@ -21,6 +21,8 @@ services:
       MQTT_BACKEND_PASSWORD: ${MQTT_BACKEND_PASSWORD:-blindway-backend}
       MQTT_INGRESS_MODE: ${MQTT_INGRESS_MODE:-database}
       KAFKA_ENABLED: ${KAFKA_ENABLED:-false}
+      LOG_ARCHIVE_ENABLED: ${LOG_ARCHIVE_ENABLED:-false}
+      LOGGING_FILE_NAME: /var/log/blindway/application.json
       KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka-1:19092,kafka-2:19092,kafka-3:19092}
       JWT_SECRET: ${JWT_SECRET:-local-development-secret-change-me-32-bytes}
       JWT_ACCESS_TOKEN_TTL: ${JWT_ACCESS_TOKEN_TTL:-PT15M}
@@ -28,6 +30,8 @@ services:
       AMAP_WEB_KEY: ${AMAP_WEB_KEY:-}
     expose:
       - "8080"
+    volumes:
+      - backend-logs:/var/log/blindway
     depends_on:
       postgres:
         condition: service_healthy
@@ -78,7 +82,7 @@ services:
       retries: 20
 
   minio:
-    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-blindway}
@@ -215,6 +219,19 @@ services:
     depends_on:
       - loki
 
+  log-collector:
+    profiles: [kafka]
+    image: fluent/fluent-bit:4.1.0
+    command: ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/blindway.conf"]
+    volumes:
+      - ./ops/fluent-bit.conf:/fluent-bit/etc/blindway.conf:ro
+      - ./ops/fluent-bit-parsers.conf:/fluent-bit/etc/blindway-parsers.conf:ro
+      - ./ops/filter-archive-log.lua:/fluent-bit/etc/filter-archive-log.lua:ro
+      - backend-logs:/var/log/blindway:ro
+    depends_on:
+      kafka-1:
+        condition: service_healthy
+
 volumes:
   postgres-data:
   minio-data:
@@ -225,3 +242,4 @@ volumes:
   kafka-1-data:
   kafka-2-data:
   kafka-3-data:
+  backend-logs:

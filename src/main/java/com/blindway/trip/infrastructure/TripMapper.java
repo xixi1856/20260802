@@ -24,6 +24,31 @@ public interface TripMapper {
 
     @Select(
             """
+            SELECT id, user_id, device_id, status, started_at, ended_at, created_at, updated_at
+            FROM trip WHERE user_id = #{userId}
+            ORDER BY started_at DESC, id DESC
+            LIMIT #{size} OFFSET #{offset}
+            """)
+    List<TripRow> findByUser(@Param("userId") UUID userId, @Param("size") int size, @Param("offset") long offset);
+
+    @Select("SELECT count(*) FROM trip WHERE user_id = #{userId}")
+    long countByUser(UUID userId);
+
+    @Select(
+            """
+            SELECT id, recorded_at, ST_X(location::geometry) AS longitude,
+                   ST_Y(location::geometry) AS latitude, accuracy_meters, speed_meters_per_second
+            FROM trip_track_point
+            WHERE trip_id = #{tripId}
+              AND (#{after}::timestamptz IS NULL OR recorded_at > #{after}::timestamptz)
+            ORDER BY recorded_at, id
+            LIMIT #{limit}
+            """)
+    List<TrackPointRow> findTrackPoints(
+            @Param("tripId") UUID tripId, @Param("after") Instant after, @Param("limit") int limit);
+
+    @Select(
+            """
             SELECT t.id, t.user_id, t.device_id, t.status, t.started_at, t.ended_at, t.created_at, t.updated_at
             FROM trip t
             JOIN device d ON d.id = t.device_id

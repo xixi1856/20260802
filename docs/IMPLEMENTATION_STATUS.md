@@ -12,6 +12,7 @@
 | 行程 | 开始/结束状态机、一次一个活动行程、最多100点的WGS84轨迹批量上传、感知事件前后轨迹点插值与位置质量分级 |
 | 感知 | 三类MQTT消息、32KB限制、Schema版本检查、`eventId`幂等、位置匹配、保留策略 |
 | 事件扇出 | 事务Outbox、Kafka幂等生产、三个独立消费组、消费端事务去重、重试与DLT |
+| 无 Kafka 默认模式 | Inbox 处理正常运行，不再新增没有 Publisher 的 Outbox 记录；历史 PENDING/DEAD 不自动删除；非法入口配置在启动时拒绝 |
 | Kafka高可用 | 三节点KRaft、6分区、RF=3、min ISR=2、`acks=all`、双实例Outbox租约发布 |
 | 社区 | 原始Report审计、分片空间去重聚合、风险Feed、可信度核验、乐观锁治理状态机、状态历史、图片证据 |
 | 路线风险 | 基于WGS84路线走廊的PostGIS问题检索、风险贡献计算和LOW/MEDIUM/HIGH分级 |
@@ -38,7 +39,9 @@
 
 - 当前 Kafka、PostgreSQL 和 EMQX 均位于单台开发机；仍需在真实 Ubuntu 多主机环境验证跨主机故障、网络分区、滚动升级、备份恢复和监控告警。
 - 故障期间网关 20 次健康探测有 1 次失败；需增加主动健康检查、连接排空，并独立测量 Backend Outbox Publisher 的租约接管 RTO。
-- 约 152 msg/s 的探索压测出现 55/2,500 的 MQTT 接入缺口；需实现持久化 Inbox 后 ACK 与异步 Worker，或评估 EMQX 到 Kafka 的可靠桥接。
+- 约 152 msg/s 的探索压测出现 55/2,500 的 MQTT 接入缺口；持久化 Inbox 后 ACK 与异步 Worker 已有代码，但尚需在同一压测条件下复测，或另行评估 EMQX 到 Kafka 的可靠桥接。
+- Kafka-first raw ingress 代码仍保留；必须先盘点各环境的入口模式、raw ingress topic lag 与 DLT，才能删除该入口并统一为 DB-first。
+- 本轮 Outbox 写入门控尚需真实 PostgreSQL 事务、Kafka offset 故障测试及运行态复验；不能将代码改动视为完成生产验收。
 - 配置测试高德Key后，用WireMock覆盖错误映射，再执行真实Staging限额内调用。
 - 配置TLS证书和EMQX ACL后，验证8883双向链路、断线补传和设备越权场景。
 - 在Staging准备10万条问题数据，执行k6与SQL性能测试；达到指标后才能写入简历。

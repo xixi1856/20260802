@@ -1,10 +1,12 @@
 package com.blindway.map;
 
+import java.util.List;
+
 public interface MapProvider {
 
     ReverseGeocode reverseGeocode(double wgs84Longitude, double wgs84Latitude);
 
-    WalkingRoute walkingRoute(
+    List<WalkingRoute> walkingRoutes(
             double originWgs84Longitude,
             double originWgs84Latitude,
             double destinationWgs84Longitude,
@@ -12,5 +14,7 @@ public interface MapProvider {
 
     record ReverseGeocode(String formattedAddress) {}
 
-    record WalkingRoute(int distanceMeters, int durationSeconds, String polylineGcj02) {}
+    record WalkingRoute(int distanceMeters, int durationSeconds, String polylineGcj02, List<Point> pointsWgs84) {}
+
+    record Point(double longitude, double latitude) {}
 }

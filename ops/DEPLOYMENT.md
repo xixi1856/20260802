@@ -53,6 +53,27 @@ http://backend:8080/api/v1/internal/emqx/authorization
 
 认证请求必须传递 `username`、`clientid`和`password`；授权请求传递 `username`、`clientid`、`action`和`topic`。生产中后端内部接口只允许EMQX所在网络访问。
 
+### MQTT 入口收敛前的发布门槛
+
+默认入口是 PostgreSQL Inbox。`KAFKA_ENABLED=false` 时应用仍处理 Inbox，但不新增 Outbox；启用 Kafka 扇出时，
+Outbox 与感知业务写入及 Inbox 最终状态处于同一个数据库事务。切换配置或升级前，分别在 Staging 和 Production 记录
+`MQTT_INGRESS_MODE`、`KAFKA_ENABLED` 的实际值，并执行以下只读盘点：
+
+```sql
+SELECT process_status, count(*) FROM mqtt_inbox GROUP BY process_status ORDER BY process_status;
+SELECT status, count(*) FROM integration_event_outbox GROUP BY status ORDER BY status;
+```
+
+若任何环境使用 `MQTT_INGRESS_MODE=kafka`，还须查询 `perception-ingress-v1` 消费组在
+`blindway.mqtt.ingress.v1` 的 lag，并盘点 `blindway.mqtt.ingress.v1.DLT` 中是否有待重放事件。
+例如在本地 Compose 中可用 `kafka-consumer-groups.sh --bootstrap-server kafka-1:19092 --describe --group perception-ingress-v1`
+读取各分区 lag；DLT 的保留事件需按 eventId 与 Inbox 对账。未确认 raw ingress 已全部落入 Inbox 前，
+**不得部署移除 Kafka-first Consumer 的版本**。旧 Kafka topic 与 DLT 不由应用代码或迁移脚本删除。
+
+原有 Outbox `PENDING` 或 `DEAD` 记录也不自动删除：确认启用 Publisher 并追平后保留发布审计，或单独审批迁移与处置方案。
+关闭 Kafka 扇出只影响新事件是否写 Outbox，不表示旧记录已被发布。灰度时核对 MQTT ACK 后 Inbox 是否存在、
+Inbox/Outbox 积压、三个消费组 lag 和重复投影效果；异常时回滚应用版本并保留数据供重放。
+
 ## 6. 监控
 
 至少建立以下告警：readiness失败、HTTP 5xx、数据库连接池耗尽、MQTT拒绝率、MQTT持久化P95、高德错误率、磁盘容量、备份失败、设备长时间离线。性能结论只使用保留了脚本、硬件和数据规模的测试结果。
