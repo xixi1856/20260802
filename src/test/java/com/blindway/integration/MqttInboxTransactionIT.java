@@ -101,7 +101,8 @@ class MqttInboxTransactionIT {
                 """,
                 DEVICE_ID);
         String source = Files.readString(Path.of("contracts/examples/mqtt/heartbeat.valid.json"));
-        String payload = source.replace("f175ac94-04d1-4f18-a2d1-a1fb053547d2", UUID.randomUUID().toString());
+        String payload = source.replace(
+                "f175ac94-04d1-4f18-a2d1-a1fb053547d2", UUID.randomUUID().toString());
         MqttEnvelope envelope = objectMapper.readValue(payload, MqttEnvelope.class);
         String topic = "blindway/v1/devices/" + DEVICE_ID + "/heartbeat";
         Instant receivedAt = Instant.now();
@@ -156,7 +157,8 @@ class MqttInboxTransactionIT {
     }
 
     private int count(String table, String idColumn) {
-        return jdbc.queryForObject("SELECT count(*) FROM " + table + " WHERE " + idColumn + " = ?", Integer.class, row.eventId());
+        return jdbc.queryForObject(
+                "SELECT count(*) FROM " + table + " WHERE " + idColumn + " = ?", Integer.class, row.eventId());
     }
 
     private String status() {

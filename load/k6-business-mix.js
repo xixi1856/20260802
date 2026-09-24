@@ -81,8 +81,8 @@ export function routeRisk(data) {
   const points = [];
   for (let index = 0; index < 20; index += 1) {
     points.push({
-      longitude: 116.392 + index * 0.00055 + shift,
-      latitude: 39.912 + index * 0.00045 - shift,
+      longitude: 116.342128 + index * (0.11 / 19),
+      latitude: 39.916527 + shift,
     });
   }
   const response = http.post(

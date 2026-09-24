@@ -1,6 +1,6 @@
 param(
     [int]$UserCount = 50,
-    [int]$IssueCount = 10000,
+    [int]$IssueCount = 300,
     [string]$BaseUrl = "http://127.0.0.1:8080/api/v1",
     [switch]$KeepExistingLoadIssues
 )

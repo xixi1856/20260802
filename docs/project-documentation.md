@@ -13,7 +13,7 @@
 | EMQX/设备 | 设备凭据与 Topic 授权；MQTT 三类消息接入 | 将设备事件可靠记录和异步处理 |
 | 运维人员 | Actuator/Prometheus、Compose、备份脚本 | 观察、部署与恢复；是否已投入生产**无法从当前项目确认** |
 
-**边界。** `insight` 的社区候选仅记录符合条件的固定障碍投影；它没有自动创建 `accessibility_issue`。高德接口提供逆地理编码和步行路线预览，路线风险接口接收客户端提供的坐标点；代码没有自动取得多条路线并重排。见 `insight/application/CommunityCandidateProjectionConsumer.java`、`map/api/MapController.java`、`accessibility/application/AccessibilityService.java`。
+**边界。** 高德接口最多取得三条候选步行路线，保留 GCJ-02 展示折线，并以转换后的 WGS84 折线查询已核验问题。后端按高、中、低风险点数量及路线长度排序。真实树莓派提醒程序和手机地图页面不在本仓库。见 `map/application/WalkingRoutesService.java`、`map/infrastructure/AmapMapProvider.java`、`accessibility/application/AccessibilityService.java`。
 
 ## 2. 需求分析
 
@@ -253,7 +253,7 @@ Kafka Publisher 默认 100 ms 轮询、50 条/批，租约默认 30 秒，发送
 | POST `/trips/{tripId}/completion` | 路径 ID → `TripResponse` | JWT+行程所有权；200 / 404 |
 | GET `/accessibility-issues` | 经/纬度、半径 10–5000 m、limit 1–100 → Issue 数组 | JWT；200 / 400,429,503 |
 | POST `/accessibility-issues` | type、description、severity 1–5、坐标 → `IssueResponse` | JWT；201 / 400；聚合时仍 201 |
-| POST `/accessibility-issues/route-risk-assessments` | 2–500 个路线点、可选走廊 5–100 m → 分数/等级/贡献 | JWT；200 / 400,429,503 |
+| POST `/accessibility-issues/route-risk-assessments` | 2–5000 个 WGS84 路线点、可选走廊 5–100 m → 已核验的高/中/低数量及标记位置 | JWT；200 / 400,429,503 |
 | GET `/accessibility-issues/{issueId}` | ID → `IssueResponse` | JWT；200 / 404 |
 | GET `/accessibility-issues/{issueId}/reports` | ID → 原始报告数组 | JWT；200 / 404 |
 | POST `/accessibility-issues/{issueId}/verifications` | `decision,note` → 空 | JWT；204 / 404,409 |
@@ -262,7 +262,7 @@ Kafka Publisher 默认 100 ms 轮询、50 条/批，租约默认 30 秒，发送
 | POST `/media` | multipart `file` → `MediaResponse` 与签名 URL | JWT；201 / 400,503 |
 | GET `/media/{mediaId}/access-url` | ID → `{accessUrl}` | 媒体所有者；200 / 404,503 |
 | GET `/map/reverse-geocode` | WGS84 经/纬度 → 地址 | JWT；200 / 400,503 |
-| GET `/map/walking-routes` | 起终点 WGS84 → 距离、时长、GCJ-02 polyline | JWT；200 / 400,503 |
+| GET `/map/walking-routes` | 起终点 WGS84 → 最多三条按风险数量和长度排序的 GCJ-02 路线 | JWT；200 / 400,429,503 |
 | POST `/admin/mqtt-inbox/{eventId}/replay` | eventId → 空 | ADMIN；204 / 403,409 |
 | POST `/internal/emqx/authentication` | username/clientid/password → allow/deny | HTTP 公开、预期仅 EMQX 内网；200 |
 | POST `/internal/emqx/authorization` | username/clientid/action/topic → allow/deny | HTTP 公开、预期仅 EMQX 内网；200 |
@@ -275,7 +275,7 @@ Kafka Publisher 默认 100 ms 轮询、50 条/批，租约默认 30 秒，发送
 
 并发机制不是自定义大线程池：空间查询用公平 `Semaphore`；Kafka 入站用 `Semaphore` 控制 in-flight、`CompletableFuture` 完成回调与超时；Paho 失败重连使用 `CompletableFuture.delayedExecutor`；定时任务池配置为 4。`@Scheduled` 用于 Inbox 轮询、Outbox 发布和凌晨 UTC 保留清理。没有发现 `synchronized` 业务锁、Java CAS 更新数据库、显式线程池 Bean 或 Spring Event 业务监听。数据库并发依赖锁、唯一约束和条件 UPDATE。
 
-序列化使用 Spring Boot 4 的 Jackson (`tools.jackson`)，对未知 JSON 属性启用失败；感知 envelope 和 Kafka 事件为 JSON，PostgreSQL 用 `jsonb` 存 Inbox/障碍/Outbox。日志使用 SLF4J，配置 `logging.structured.format.console: logstash`；HTTP filter 写 MDC traceId，Inbox 处理写 MDC eventId/deviceId。异常统一为 RFC 9457 风格 `ProblemDetail`，详见第 13 节。
+序列化使用 Spring Boot 4 的 Jackson (`tools.jackson`)，对未知 JSON 属性启用失败；感知 envelope 和 Kafka 事件为 JSON，PostgreSQL 用 `jsonb` 存 Inbox/障碍/Outbox。日志使用 SLF4J，控制台和文件均为 logstash JSON；HTTP filter 写 MDC traceId，Inbox 处理写 MDC eventId/deviceId。可选 Fluent Bit 链路只归档脱敏后的 WARN/ERROR。异常统一为 RFC 9457 风格 `ProblemDetail`，详见第 13 节。
 
 ## 9. 事务与并发控制
 
@@ -320,7 +320,7 @@ SQL 注入防护以 MyBatis 参数绑定为主，未发现字符串拼接用户�
 
 ## 13. 异常处理与日志
 
-`common/api/ApiExceptionHandler.java` 是全局 `@RestControllerAdvice`：业务 `ApiException` 使用自定义 HTTP 状态与 code；Bean Validation/约束异常 400；不可读 JSON 400；其他异常记 ERROR 并返回 500 `INTERNAL_ERROR`。`ProblemDetail` 包含 type、title、detail、code、traceId、fieldErrors。`TraceIdFilter` 将 `X-Trace-Id` 写入 MDC/响应头；Inbox 处理临时加 eventId、deviceId。控制台结构化 JSON 配置为 logstash 格式，Worker/Outbox 日志对周期性轮询失败做 30 秒节流。见 `application.yml`、`TraceIdFilter.java`、`MqttInboxWorker.java`、`KafkaOutboxPublisher.java`。
+`common/api/ApiExceptionHandler.java` 是全局 `@RestControllerAdvice`：业务 `ApiException` 使用自定义 HTTP 状态与 code；Bean Validation/约束异常 400；不可读 JSON 400；其他异常记 ERROR 并返回 500 `INTERNAL_ERROR`。`ProblemDetail` 包含 type、title、detail、code、traceId、fieldErrors。`TraceIdFilter` 将 `X-Trace-Id` 写入 MDC/响应头；Inbox 处理临时加 eventId、deviceId。控制台和文件使用结构化 JSON，Worker/Outbox 日志对周期性轮询失败做 30 秒节流。可选日志归档链路及字段限制见 ADR 0007。
 
 **排障限制。** `ApiExceptionHandler` 的泛型 500 会保护内部错误，但当前没有明确的业务请求/数据库调用跨度 tracing；Kafka 消费线程不继承 HTTP traceId，事件载荷也不带 traceId。`MediaService` 将底层 MinIO 异常转为 503 时不记录原因；`DevicePresence` Redis 失败日志不带异常；`AmapMapProvider` 不记录远端错误细节；这些会影响故障定位。`issue_status_history` 是问题业务状态历史，不等同于覆盖所有管理行为的审计日志。
 

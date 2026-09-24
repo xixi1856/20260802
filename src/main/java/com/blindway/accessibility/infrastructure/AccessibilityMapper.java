@@ -19,7 +19,7 @@ public interface AccessibilityMapper {
 
     @Select(
             """
-            SELECT id, reporter_user_id, type, description, status, severity, report_count,
+            SELECT id, reporter_user_id, type, description, status, severity, verified_risk_level, report_count,
                    confirmation_count, rejection_count, confidence_score,
                    (severity * confidence_score / 10)::integer AS risk_score, version,
                    ST_X(location::geometry) AS longitude, ST_Y(location::geometry) AS latitude,
@@ -98,7 +98,7 @@ public interface AccessibilityMapper {
 
     @Select(
             """
-            SELECT id, reporter_user_id, type, description, status, severity, report_count,
+            SELECT id, reporter_user_id, type, description, status, severity, verified_risk_level, report_count,
                    confirmation_count, rejection_count, confidence_score,
                    (severity * confidence_score / 10)::integer AS risk_score, version,
                    ST_X(location::geometry) AS longitude,
@@ -109,6 +109,17 @@ public interface AccessibilityMapper {
             WHERE id = #{id}
             """)
     Optional<IssueRow> findById(UUID id);
+
+    @Select(
+            """
+            SELECT id, reporter_user_id, type, description, status, severity, verified_risk_level, report_count,
+                   confirmation_count, rejection_count, confidence_score,
+                   (severity * confidence_score / 10)::integer AS risk_score, version,
+                   ST_X(location::geometry) AS longitude, ST_Y(location::geometry) AS latitude,
+                   NULL::double precision AS distance_meters, last_reported_at, created_at, updated_at
+            FROM accessibility_issue WHERE id = #{id} FOR UPDATE
+            """)
+    Optional<IssueRow> findByIdForUpdate(UUID id);
 
     @Select(
             """
@@ -149,7 +160,7 @@ public interface AccessibilityMapper {
                 FROM risk_cutoff
             )
             SELECT issue.id, issue.reporter_user_id, issue.type, issue.description, issue.status,
-                   issue.severity, issue.report_count, issue.confirmation_count, issue.rejection_count,
+                   issue.severity, issue.verified_risk_level, issue.report_count, issue.confirmation_count, issue.rejection_count,
                    issue.confidence_score,
                    (issue.severity * issue.confidence_score / 10)::integer AS risk_score, issue.version,
                    ST_X(issue.location::geometry) AS longitude,
@@ -190,17 +201,19 @@ public interface AccessibilityMapper {
     @Insert(
             """
             INSERT INTO issue_verification
-                (id, issue_id, user_id, decision, note, created_at, updated_at)
+                (id, issue_id, user_id, decision, risk_level, note, created_at, updated_at)
             VALUES
-                (#{id}, #{issueId}, #{userId}, #{decision}, #{note}, #{now}, #{now})
+                (#{id}, #{issueId}, #{userId}, #{decision}, #{riskLevel}, #{note}, #{now}, #{now})
             ON CONFLICT (issue_id, user_id) DO UPDATE
-            SET decision = EXCLUDED.decision, note = EXCLUDED.note, updated_at = EXCLUDED.updated_at
+            SET decision = EXCLUDED.decision, risk_level = EXCLUDED.risk_level,
+                note = EXCLUDED.note, updated_at = EXCLUDED.updated_at
             """)
     void upsertVerification(
             @Param("id") UUID id,
             @Param("issueId") UUID issueId,
             @Param("userId") UUID userId,
             @Param("decision") String decision,
+            @Param("riskLevel") String riskLevel,
             @Param("note") String note,
             @Param("now") Instant now);
 
@@ -213,10 +226,22 @@ public interface AccessibilityMapper {
             """)
     VerificationCounts countVerifications(UUID issueId);
 
+    @Select(
+            """
+            SELECT risk_level FROM issue_verification
+            WHERE issue_id = #{issueId} AND decision = 'CONFIRM' AND risk_level IS NOT NULL
+            GROUP BY risk_level
+            ORDER BY count(*) DESC,
+                     CASE risk_level WHEN 'HIGH' THEN 0 WHEN 'MEDIUM' THEN 1 ELSE 2 END
+            LIMIT 1
+            """)
+    Optional<String> winningRiskLevel(UUID issueId);
+
     @Update(
             """
             UPDATE accessibility_issue
             SET confirmation_count = #{confirms}, rejection_count = #{rejects},
+                verified_risk_level = #{riskLevel},
                 confidence_score = GREATEST(0, LEAST(100, 20 + report_count * 15 + #{confirms} * 20 - #{rejects} * 25)),
                 updated_at = #{now}
             WHERE id = #{issueId}
@@ -225,6 +250,7 @@ public interface AccessibilityMapper {
             @Param("issueId") UUID issueId,
             @Param("confirms") int confirms,
             @Param("rejects") int rejects,
+            @Param("riskLevel") String riskLevel,
             @Param("now") Instant now);
 
     @Select("SELECT set_config('statement_timeout', #{timeout}, true)")
@@ -233,17 +259,13 @@ public interface AccessibilityMapper {
     @Select(
             """
             WITH route AS MATERIALIZED (
-                SELECT ST_SetSRID(ST_GeomFromText(#{lineStringWkt}), 4326)::geography AS path
+                SELECT ST_SetSRID(ST_GeomFromText(#{lineStringWkt}), 4326) AS path
             ), candidate_route AS MATERIALIZED (
                 SELECT path,
-                       CASE
-                           WHEN ST_NPoints(path::geometry) <= 20 THEN path::geometry
-                           ELSE ST_Segmentize(
-                               ST_SimplifyPreserveTopology(path::geometry, 5.0 / 111320.0)::geography,
-                               75.0)::geometry
-                       END AS path_for_candidates,
-                       CASE WHEN ST_NPoints(path::geometry) <= 20 THEN 0.0 ELSE 5.0 END
-                           AS tolerance_meters
+                       CASE WHEN ST_NPoints(path) <= 20 THEN path ELSE ST_Segmentize(
+                           ST_SimplifyPreserveTopology(path, 5.0 / 111320.0)::geography, 75.0)::geometry END
+                           AS path_for_candidates,
+                       CASE WHEN ST_NPoints(path) <= 20 THEN 0.0 ELSE 5.0 END AS tolerance_meters
                 FROM route
             ), segments AS MATERIALIZED (
                 SELECT dumped.geom::geography AS path, candidate_route.tolerance_meters
@@ -253,26 +275,26 @@ public interface AccessibilityMapper {
                 SELECT DISTINCT issue.id
                 FROM segments
                 JOIN accessibility_issue issue
-                  ON issue.status IN ('PENDING', 'VERIFIED', 'PROCESSING')
-                 AND issue.confidence_score >= 20
-                 AND ST_DWithin(
-                     issue.location, segments.path, #{corridorMeters} + segments.tolerance_meters, false)
-            ), distances AS MATERIALIZED (
-                SELECT issue.id AS issue_id, issue.type, issue.severity, issue.confidence_score,
-                       issue.last_reported_at,
-                       ST_Distance(issue.location, route.path, false) AS distance_to_route_meters
+                  ON issue.status IN ('VERIFIED', 'PROCESSING')
+                 AND issue.verified_risk_level IS NOT NULL
+                 AND ST_DWithin(issue.location, segments.path,
+                     #{corridorMeters} + segments.tolerance_meters, false)
+            ), matches AS MATERIALIZED (
+                SELECT issue.id AS issue_id, issue.type, issue.verified_risk_level AS risk_level,
+                       issue.location, route.path,
+                       ST_Distance(issue.location, route.path::geography, false) AS distance_to_route_meters
                 FROM candidate_ids
                 JOIN accessibility_issue issue ON issue.id = candidate_ids.id
                 CROSS JOIN route
             )
-            SELECT issue_id, type, severity, confidence_score, distance_to_route_meters,
-                   GREATEST(1, ROUND(severity * confidence_score / 10.0
-                       * GREATEST(0.25, 1 - EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - last_reported_at)) / 2592000.0)
-                       * (1 - distance_to_route_meters / #{corridorMeters})))::integer AS contribution
-            FROM distances
+            SELECT issue_id, type, risk_level,
+                   ST_X(location::geometry) AS longitude, ST_Y(location::geometry) AS latitude,
+                   ST_X(ST_ClosestPoint(path, location::geometry)) AS nearest_longitude,
+                   ST_Y(ST_ClosestPoint(path, location::geometry)) AS nearest_latitude,
+                   distance_to_route_meters
+            FROM matches
             WHERE distance_to_route_meters <= #{corridorMeters}
-            ORDER BY contribution DESC, distance_to_route_meters
-            LIMIT 100
+            ORDER BY risk_level, distance_to_route_meters, issue_id
             """)
     List<RouteRiskRow> findRouteRisks(
             @Param("lineStringWkt") String lineStringWkt, @Param("corridorMeters") int corridorMeters);
@@ -310,7 +332,7 @@ public interface AccessibilityMapper {
             """
             UPDATE accessibility_issue
             SET status = #{status}, version = version + 1, updated_at = #{now}
-            WHERE id = #{issueId} AND status IN ('PENDING', 'VERIFIED', 'REJECTED')
+            WHERE id = #{issueId} AND status IN ('PENDING', 'VERIFIED', 'REJECTED', 'REOPENED')
             """)
     int updateStatus(@Param("issueId") UUID issueId, @Param("status") String status, @Param("now") Instant now);
 

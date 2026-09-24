@@ -3,13 +3,15 @@ package com.blindway.accessibility.api;
 import java.util.List;
 
 public record RouteRiskResponse(
-        int riskScore, String riskLevel, int issueCount, int corridorMeters, List<RiskIssue> issues) {
+        int highCount, int mediumCount, int lowCount, int corridorMeters, List<RiskIssue> issues) {
 
     public record RiskIssue(
             java.util.UUID issueId,
             String type,
-            int severity,
-            int confidenceScore,
-            double distanceToRouteMeters,
-            int contribution) {}
+            String riskLevel,
+            double longitude,
+            double latitude,
+            double nearestLongitude,
+            double nearestLatitude,
+            double distanceToRouteMeters) {}
 }

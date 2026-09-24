@@ -1,5 +1,6 @@
 package com.blindway.accessibility.application;
 
+import com.blindway.accessibility.RouteIssueAccess;
 import com.blindway.accessibility.api.CreateIssueRequest;
 import com.blindway.accessibility.api.IssueReportResponse;
 import com.blindway.accessibility.api.IssueResponse;
@@ -24,7 +25,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-public class AccessibilityService {
+public class AccessibilityService implements RouteIssueAccess {
 
     private static final int DUPLICATE_RADIUS_METERS = 20;
     private static final long DUPLICATE_WINDOW_MINUTES = 30;
@@ -99,20 +100,30 @@ public class AccessibilityService {
             cacheNames = {CacheConfig.NEARBY_ISSUES, CacheConfig.ROUTE_RISKS},
             allEntries = true)
     public void verify(UUID userId, UUID issueId, VerificationRequest request) {
-        IssueRow issue = requireIssue(issueId);
-        if ("RESOLVED".equals(issue.status())) {
-            throw new ApiException(HttpStatus.CONFLICT, "ISSUE_ALREADY_RESOLVED", "问题已解决");
+        IssueRow issue = mapper.findByIdForUpdate(issueId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "ISSUE_NOT_FOUND", "无障碍问题不存在"));
+        if (!List.of("PENDING", "VERIFIED", "REJECTED", "REOPENED").contains(issue.status())) {
+            throw new ApiException(HttpStatus.CONFLICT, "ISSUE_NOT_VOTABLE", "当前问题状态不允许投票");
         }
         Instant now = Instant.now();
         mapper.upsertVerification(
-                UUID.randomUUID(), issueId, userId, request.decision().name(), request.note(), now);
+                UUID.randomUUID(),
+                issueId,
+                userId,
+                request.decision().name(),
+                request.riskLevel() == null ? null : request.riskLevel().name(),
+                request.note(),
+                now);
         VerificationCounts counts = mapper.countVerifications(issueId);
-        mapper.updateTrust(issueId, counts.confirms(), counts.rejects(), now);
-        String nextStatus = counts.confirms() >= 2 && counts.confirms() > counts.rejects()
+        String riskLevel = mapper.winningRiskLevel(issueId).orElse(null);
+        mapper.updateTrust(issueId, counts.confirms(), counts.rejects(), riskLevel, now);
+        String nextStatus = counts.confirms() >= 2 && counts.confirms() > counts.rejects() && riskLevel != null
                 ? "VERIFIED"
                 : counts.rejects() >= 2 && counts.rejects() >= counts.confirms() ? "REJECTED" : "PENDING";
         if (!nextStatus.equals(issue.status())) {
-            mapper.updateStatus(issueId, nextStatus, now);
+            if (mapper.updateStatus(issueId, nextStatus, now) != 1) {
+                throw new ApiException(HttpStatus.CONFLICT, "ISSUE_VERSION_CONFLICT", "问题状态已变化，请重试");
+            }
             mapper.insertHistory(UUID.randomUUID(), issueId, issue.status(), nextStatus, userId, "社区核验结果", now);
         }
     }
@@ -131,27 +142,66 @@ public class AccessibilityService {
     public RouteRiskResponse assessRoute(RouteRiskRequest request) {
         int corridorMeters =
                 request.corridorMeters() == null ? DEFAULT_ROUTE_CORRIDOR_METERS : request.corridorMeters();
+        Inspection inspection = inspect(
+                request.points().stream()
+                        .map(point -> new Point(point.longitude(), point.latitude()))
+                        .toList(),
+                corridorMeters);
+        return new RouteRiskResponse(
+                inspection.highCount(),
+                inspection.mediumCount(),
+                inspection.lowCount(),
+                inspection.corridorMeters(),
+                inspection.issues().stream()
+                        .map(issue -> new RouteRiskResponse.RiskIssue(
+                                issue.issueId(),
+                                issue.type(),
+                                issue.riskLevel(),
+                                issue.longitude(),
+                                issue.latitude(),
+                                issue.nearestLongitude(),
+                                issue.nearestLatitude(),
+                                issue.distanceToRouteMeters()))
+                        .toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Inspection inspect(List<Point> points, int corridorMeters) {
+        if (points.size() < 2 || points.size() > 5000 || corridorMeters < 5 || corridorMeters > 100) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_ROUTE", "路线点数或走廊宽度无效");
+        }
         String lineString = "LINESTRING("
-                + request.points().stream()
+                + points.stream()
                         .map(point -> point.longitude() + " " + point.latitude())
                         .collect(java.util.stream.Collectors.joining(","))
                 + ")";
         return spatialQueryGuard.execute("route", () -> {
             mapper.setLocalStatementTimeout(spatialQueryGuard.statementTimeout("route"));
             var rows = mapper.findRouteRisks(lineString, corridorMeters);
-            int score = Math.min(
-                    100, rows.stream().mapToInt(row -> row.contribution()).sum());
-            String level = score >= 70 ? "HIGH" : score >= 35 ? "MEDIUM" : "LOW";
             var issues = rows.stream()
-                    .map(row -> new RouteRiskResponse.RiskIssue(
+                    .map(row -> new Issue(
                             row.issueId(),
                             row.type().name(),
-                            row.severity(),
-                            row.confidenceScore(),
-                            row.distanceToRouteMeters(),
-                            row.contribution()))
+                            row.riskLevel(),
+                            row.longitude(),
+                            row.latitude(),
+                            row.nearestLongitude(),
+                            row.nearestLatitude(),
+                            row.distanceToRouteMeters()))
                     .toList();
-            return new RouteRiskResponse(score, level, rows.size(), corridorMeters, issues);
+            return new Inspection(
+                    (int) rows.stream()
+                            .filter(row -> "HIGH".equals(row.riskLevel()))
+                            .count(),
+                    (int) rows.stream()
+                            .filter(row -> "MEDIUM".equals(row.riskLevel()))
+                            .count(),
+                    (int) rows.stream()
+                            .filter(row -> "LOW".equals(row.riskLevel()))
+                            .count(),
+                    corridorMeters,
+                    issues);
         });
     }
 
@@ -238,6 +288,7 @@ public class AccessibilityService {
                 row.description(),
                 row.status(),
                 row.severity(),
+                row.verifiedRiskLevel(),
                 row.reportCount(),
                 row.confirmationCount(),
                 row.rejectionCount(),

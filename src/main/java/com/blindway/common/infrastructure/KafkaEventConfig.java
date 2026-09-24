@@ -41,6 +41,16 @@ public class KafkaEventConfig {
         return replicatedTopic(EventTopics.PERCEPTION_RECORDED_DLT, "2592000000");
     }
 
+    @Bean
+    NewTopic applicationLogArchiveTopic() {
+        return replicatedTopic(EventTopics.APPLICATION_LOG_ARCHIVE, "2592000000");
+    }
+
+    @Bean
+    NewTopic applicationLogArchiveDeadLetterTopic() {
+        return replicatedTopic(EventTopics.APPLICATION_LOG_ARCHIVE_DLT, "2592000000");
+    }
+
     private NewTopic replicatedTopic(String name, String retentionMs) {
         return TopicBuilder.name(name)
                 .partitions(6)
@@ -53,9 +63,12 @@ public class KafkaEventConfig {
     @Bean
     CommonErrorHandler kafkaErrorHandler(KafkaTemplate<String, String> template) {
         DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(template, (record, exception) -> {
-            String dlt = EventTopics.MQTT_INGRESS.equals(record.topic())
-                    ? EventTopics.MQTT_INGRESS_DLT
-                    : EventTopics.PERCEPTION_RECORDED_DLT;
+            String dlt =
+                    switch (record.topic()) {
+                        case EventTopics.MQTT_INGRESS -> EventTopics.MQTT_INGRESS_DLT;
+                        case EventTopics.APPLICATION_LOG_ARCHIVE -> EventTopics.APPLICATION_LOG_ARCHIVE_DLT;
+                        default -> EventTopics.PERCEPTION_RECORDED_DLT;
+                    };
             return new TopicPartition(dlt, record.partition());
         });
         DefaultErrorHandler handler = new DefaultErrorHandler(recoverer, poisonMessageBackOff());

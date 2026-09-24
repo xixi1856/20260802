@@ -21,7 +21,8 @@ class TransactionalIntegrationEventOutboxTest {
 
     @Test
     void kafkaDisabledDoesNotAppendUnpublishableEvent() {
-        var outbox = new TransactionalIntegrationEventOutbox(mapper, JsonMapper.builder().build(), false);
+        var outbox = new TransactionalIntegrationEventOutbox(
+                mapper, JsonMapper.builder().build(), false);
 
         outbox.append(UUID.randomUUID(), "DEVICE", UUID.randomUUID(), "PERCEPTION_RECORDED", "topic", "key", "body");
 
@@ -30,7 +31,8 @@ class TransactionalIntegrationEventOutboxTest {
 
     @Test
     void kafkaEnabledAppendsEventForPublisher() {
-        var outbox = new TransactionalIntegrationEventOutbox(mapper, JsonMapper.builder().build(), true);
+        var outbox = new TransactionalIntegrationEventOutbox(
+                mapper, JsonMapper.builder().build(), true);
         UUID eventId = UUID.randomUUID();
         UUID deviceId = UUID.randomUUID();
 

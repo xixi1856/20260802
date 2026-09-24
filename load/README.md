@@ -7,10 +7,17 @@
 ```powershell
 docker compose up -d --build
 Invoke-RestMethod http://127.0.0.1:8080/actuator/health
-& .\load\prepare-load-data.ps1 -UserCount 50 -IssueCount 10000
+& .\load\prepare-load-data.ps1 -UserCount 50 -IssueCount 300
 ```
 
-准备脚本默认先清理历史 `LOAD_SEED_*` 和 `load-user-*` 压测账号创建的问题，再通过真实 API 创建用户、设备绑定和进行中行程，最后用确定性 SQL 生成 1 万条合成障碍及报告。可显式传入 `-KeepExistingLoadIssues` 保留旧压测问题。70% 数据集中在北京测试热点，用于暴露空间查询在高密度区域的性能边界；这些记录是 `ADMIN_IMPORT` 压测种子，不代表真实用户或设备数据。
+macOS/Linux 可使用等价脚本；默认准备 20 个用户和 300 条问题：
+
+```bash
+docker compose up -d --build
+USER_COUNT=20 ISSUE_COUNT=300 ./load/prepare-load-data.sh
+```
+
+准备脚本默认先清理历史 `LOAD_SEED_*` 和 `load-user-*` 压测账号创建的问题，再通过真实 API 创建用户、设备绑定和进行中行程，最后在北京约 10 km × 10 km 的测试区域内生成 300 条问题及报告。其中最多 30 条分布在代表性 10 km 路线的 30 米宽带内，其余问题均匀分布在区域内；约 60% 处于 `VERIFIED` 或 `PROCESSING`，风险等级按高 10%、中 30%、低 60% 生成。可显式传入 `-KeepExistingLoadIssues` 保留旧压测问题。这些记录是 `ADMIN_IMPORT` 测试种子，不代表真实用户或设备数据。
 
 ## 2. HTTP 压测
 
@@ -20,7 +27,10 @@ Invoke-RestMethod http://127.0.0.1:8080/actuator/health
 k6 run --summary-export load\results\smoke.json load\k6-smoke.js
 k6 run --summary-export load\results\nearby-100rps.json load\k6-nearby.js
 k6 run --summary-export load\results\issue-concurrency-20rps.json load\k6-issue-concurrency.js
+k6 run --summary-export load\results\verification-concurrency.json load\k6-verification-concurrency.js
+k6 run --summary-export load\results\issue-claim-concurrency.json load\k6-issue-claim-concurrency.js
 k6 run --summary-export load\results\track-20rps-batch20.json load\k6-track-points.js
+k6 run --summary-export load\results\trip-reads-10rps.json load\k6-trip-reads.js
 k6 run --summary-export load\results\nearby-hot-cache-200rps.json load\k6-nearby-hot-cache.js
 $env:DURATION='60s'
 foreach ($rate in 20, 25, 30) {
@@ -36,7 +46,13 @@ $env:REPORT_RATE='2'
 k6 run --summary-export load\results\business-mix.json load\k6-business-mix.js
 ```
 
-可用环境变量：`BASE_URL`、`MAX_RATE`、`RATE`、`DURATION`、`BATCH_SIZE`、`CORRIDOR_METERS`、`POINT_COUNT`，以及混合场景中的四个 `*_RATE` 和 `ROUTE_CORRIDOR_METERS`。路线脚本默认 20 RPS，并按速率预分配两倍 VU；`POINT_COUNT` 可在 2 到 500 之间调整，不同点数保持相同起终点，便于单独评估分段索引探测成本。脚本还会分别统计 200、429 和其他响应，防止把主动降级误写成成功。
+可用环境变量：`BASE_URL`、`MAX_RATE`、`RATE`、`DURATION`、`BATCH_SIZE`、`CORRIDOR_METERS`、`POINT_COUNT`，以及混合场景中的四个 `*_RATE` 和 `ROUTE_CORRIDOR_METERS`。路线脚本默认 20 RPS，并按速率预分配两倍 VU；`POINT_COUNT` 可在 2 到 5000 之间调整，不同点数保持约 10 km 的相同起终点，便于单独评估分段索引探测成本。脚本还会分别统计 200、429 和其他响应，防止把主动降级误写成成功。
+
+投票并发脚本要求通过 `ISSUE_ID` 指定待验证 Issue，使用 `MODE=same-user`、
+`MODE=different-users` 或 `MODE=tie-high-low` 选择场景；不同用户场景要求
+`load/data/users.local.json` 至少包含 `REQUEST_COUNT` 个用户。工单领取脚本要求指定
+`ISSUE_ID`、`ISSUE_VERSION`、`ADMIN_EMAIL` 和 `ADMIN_PASSWORD`，待领取 Issue 必须已处于
+允许转换到 `PROCESSING` 的状态。
 
 ### 带资源采样的混合容量测试
 
@@ -80,6 +96,8 @@ $startedAt = Get-Date
 故障演练时在发布过程中执行`docker stop`终止任一Kafka节点和任一backend容器，再验证：Kafka主题ISR仍不少于2、Outbox最终全部
 `PUBLISHED`、三个consumer group各消费全部唯一事件、业务投影无重复。2026-09-01 的本地 Docker 实测结果、故障时间线和已知边界见
 `docs/performance/kafka-ha-acceptance-2026-09-01.md`。
+
+路线排序改为已核验问题计数后，验收基线使用 10 km × 10 km 区域内 300 条问题和约 10 km 的代表性路线。沿用 p95 `<800 ms`、p99 `<1,500 ms`、错误率 `<1%` 和零丢弃门槛，并分别覆盖 20、500、5,000 点路线。若需要验证索引退化边界，可另建 1,000 或 3,000 条数据档，但必须标为合成压力测试，不能描述成真实道路风险密度。候选路线端到端测试会调用高德，不能用其公网延迟替代本地 PostGIS 容量结论。
 
 ## 4. 结果解释
 

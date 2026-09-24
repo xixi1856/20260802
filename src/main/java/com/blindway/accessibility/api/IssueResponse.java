@@ -10,6 +10,7 @@ public record IssueResponse(
         String description,
         String status,
         int severity,
+        String verifiedRiskLevel,
         int reportCount,
         int confirmationCount,
         int rejectionCount,

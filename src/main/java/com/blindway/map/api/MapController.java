@@ -1,6 +1,7 @@
 package com.blindway.map.api;
 
 import com.blindway.map.MapProvider;
+import com.blindway.map.application.WalkingRoutesService;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import org.springframework.validation.annotation.Validated;
@@ -15,9 +16,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class MapController {
 
     private final MapProvider provider;
+    private final WalkingRoutesService walkingRoutesService;
 
-    public MapController(MapProvider provider) {
+    public MapController(MapProvider provider, WalkingRoutesService walkingRoutesService) {
         this.provider = provider;
+        this.walkingRoutesService = walkingRoutesService;
     }
 
     @GetMapping("/reverse-geocode")
@@ -28,11 +31,12 @@ public class MapController {
     }
 
     @GetMapping("/walking-routes")
-    MapProvider.WalkingRoute walkingRoute(
+    WalkingRoutesResponse walkingRoute(
             @RequestParam @DecimalMin("-180") @DecimalMax("180") double originLongitude,
             @RequestParam @DecimalMin("-90") @DecimalMax("90") double originLatitude,
             @RequestParam @DecimalMin("-180") @DecimalMax("180") double destinationLongitude,
             @RequestParam @DecimalMin("-90") @DecimalMax("90") double destinationLatitude) {
-        return provider.walkingRoute(originLongitude, originLatitude, destinationLongitude, destinationLatitude);
+        return walkingRoutesService.walkingRoutes(
+                originLongitude, originLatitude, destinationLongitude, destinationLatitude);
     }
 }

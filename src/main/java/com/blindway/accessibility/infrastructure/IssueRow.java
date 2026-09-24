@@ -11,6 +11,7 @@ public record IssueRow(
         String description,
         String status,
         int severity,
+        String verifiedRiskLevel,
         int reportCount,
         int confirmationCount,
         int rejectionCount,

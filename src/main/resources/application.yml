@@ -83,6 +83,7 @@ logging:
   structured:
     format:
       console: logstash
+      file: logstash
 
 blindway:
   spatial:
@@ -122,6 +123,8 @@ blindway:
       lease-duration: ${KAFKA_OUTBOX_LEASE_DURATION:30s}
       send-timeout: ${KAFKA_SEND_TIMEOUT:5s}
       max-attempts: ${KAFKA_OUTBOX_MAX_ATTEMPTS:10}
+  log-archive:
+    enabled: ${LOG_ARCHIVE_ENABLED:false}
   minio:
     enabled: ${MINIO_ENABLED:false}
     endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
