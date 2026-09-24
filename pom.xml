@@ -23,7 +23,7 @@
         <mybatis-spring-boot.version>4.0.0</mybatis-spring-boot.version>
         <minio.version>8.5.17</minio.version>
         <paho.version>1.2.5</paho.version>
-        <archunit.version>1.4.1</archunit.version>
+        <archunit.version>1.5.0</archunit.version>
         <testcontainers.version>1.21.3</testcontainers.version>
         <spotless.version>2.46.1</spotless.version>
         <jacoco.version>0.8.15</jacoco.version>
